@@ -1,0 +1,25 @@
+{
+  "name": "distortion-grid",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "node --watch server/server.js",
+    "dev:client": "vite --host 0.0.0.0 client",
+    "build": "vite build client --outDir ../dist",
+    "start": "node server/server.js"
+  },
+  "dependencies": {
+    "@discord/embedded-app-sdk": "^2.4.0",
+    "cors": "^2.8.5",
+    "discord.js": "^14.22.1",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "vite": "^6.1.0"
+  }
+}

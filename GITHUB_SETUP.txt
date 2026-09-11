@@ -1,0 +1,49 @@
+HOW TO CREATE THESE FOLDERS IN GITHUB
+
+EASIEST METHOD — GITHUB DESKTOP
+1. Download and unzip Distortion-Grid-GitHub-Starter.zip.
+2. Open GitHub Desktop.
+3. File > Add local repository.
+4. Choose the extracted folder named distortion-grid-github.
+5. If GitHub Desktop says it is not a repository, choose "create a repository here".
+6. Name it: distortion-grid
+7. Commit all files.
+8. Click Publish repository.
+9. Keep it Private while testing.
+
+IF USING GITHUB.COM
+GitHub creates folders when you type a slash in a new file name.
+
+Example:
+- Add file > Create new file
+- Type: client/index.html
+This creates the client folder.
+
+Nested folder example:
+- Type: client/src/main.js
+
+Create these paths:
+client/index.html
+client/src/main.js
+client/src/styles.css
+client/src/game.js
+client/src/audio.js
+client/src/discord.js
+client/assets/distortion-background.png   (upload this file)
+server/server.js
+server/database.js
+server/discordBot.js
+server/discordAuth.js
+server/puzzleGenerator.js
+server/leaderboard.js
+server/admin.js
+
+Root files:
+package.json
+.gitignore
+.env.example
+README.md
+
+IMPORTANT:
+Never upload a real .env file.
+Never put your Discord Bot Token, Client Secret, or database password into GitHub.
