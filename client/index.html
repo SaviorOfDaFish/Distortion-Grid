@@ -10,7 +10,6 @@
 <div class="wrap">
   <div class="top">
     <div>
-      <div class="eyebrow">MONSTER HUNT • DAILY PUZZLE</div>
       <h1>Distortion Grid</h1>
     </div>
     <div class="meta">
@@ -74,7 +73,7 @@
         <span title="Conduit">━ Path</span>
       </div>
       <div class="mini-actions">
-        <button class="action mini" id="reset">Reset</button>
+        <button class="action mini give-up-btn" id="giveUp">Give Up</button>
         <button class="action alt mini" id="new">Test</button>
       </div>
     </div>
@@ -214,6 +213,22 @@
     <p class="guide-copy">Fewest moves ranks first. Faster time breaks ties.</p>
     <div id="top5List"></div>
     <button id="closeTop5" class="primary" style="width:100%;margin-top:14px">Back to Grid</button>
+  </div>
+</div>
+
+
+<div id="giveUpResult" class="result hidden">
+  <div class="modal">
+    <div class="eyebrow incomplete-label">ATTEMPT INCOMPLETE</div>
+    <h2>Par Path Revealed</h2>
+    <p class="guide-copy">Your official attempt has been marked incomplete. The board has been rotated into the exact Par solution so you can see how the Distortion connects.</p>
+    <div class="resultstats" style="grid-template-columns:repeat(3,1fr)">
+      <div class="stat"><span>Moves Made</span><b id="gMoves">0</b></div>
+      <div class="stat"><span>Par</span><b id="gPar">0</b></div>
+      <div class="stat"><span>Time</span><b id="gTime">0:00</b></div>
+    </div>
+    <div class="give-up-note">🚫 This result does not enter the Daily Champion or Top 5 leaderboard.</div>
+    <button class="primary" id="closeGiveUp" style="width:100%;margin-top:14px">View Par Path</button>
   </div>
 </div>
 
