@@ -601,7 +601,67 @@ function updateRecordPanel(){
   document.getElementById('recordTime').textContent=formatSec(rec.seconds);
 }
 
-function incompleteStorageKey(){return 'dg_incomplete_'+S.key}\n\nfunction revealParPath(){\n  // rot=0 is the generator's solved orientation for every tile.\n  S.tiles.flat().forEach(t=>t.rot=0);\n  render();\n  const board=document.getElementById('board');\n  board?.classList.add('par-revealed');\n}\n\nfunction giveUp(){\n  if(S.done || S.gaveUp) return;\n\n  const ok=window.confirm(\n    'Give up on today\\'s Distortion?\\n\\nYour attempt will be marked Incomplete and the Par solution will be revealed.'\n  );\n  if(!ok) return;\n\n  clearInterval(S.timer);\n  clearInterval(S.studyTimer);\n\n  S.gaveUp=true;\n  S.done=true;\n  S.finished=Date.now();\n  S.studying=false;\n\n  document.getElementById('studyOverlay')?.classList.add('hidden');\n  document.getElementById('board')?.classList.remove('studying');\n\n  const phase=document.getElementById('phaseBanner');\n  if(phase){\n    phase.textContent='Incomplete';\n    phase.classList.remove('live');\n    phase.classList.add('incomplete');\n  }\n\n  // Preserve the time/moves they had when they surrendered.\n  const elapsed=secondsTaken();\n  if(!S.isTest){\n    localStorage.setItem(incompleteStorageKey(),JSON.stringify({\n      status:'incomplete',\n      moves:S.moves,\n      seconds:elapsed,\n      par:S.min,\n      difficulty:S.difficulty,\n      gridNumber:S.num,\n      gaveUpAt:Date.now()\n    }));\n  }\n\n  revealParPath();\n\n  document.getElementById('gMoves').textContent=S.moves;\n  document.getElementById('gPar').textContent=S.min;\n  document.getElementById('gTime').textContent=formatSec(elapsed);\n  document.getElementById('giveUpResult').classList.remove('hidden');\n}\n\nfunction finish(){
+function incompleteStorageKey(){
+  return 'dg_incomplete_'+S.key;
+}
+
+function revealParPath(){
+  // rot=0 is the generator's solved orientation for every tile.
+  S.tiles.flat().forEach(t=>t.rot=0);
+  render();
+  const board=document.getElementById('board');
+  board?.classList.add('par-revealed');
+}
+
+function giveUp(){
+  if(S.done || S.gaveUp) return;
+
+  const ok=window.confirm(
+    "Give up on today's Distortion?\n\nYour attempt will be marked Incomplete and the Par solution will be revealed."
+  );
+  if(!ok) return;
+
+  clearInterval(S.timer);
+  clearInterval(S.studyTimer);
+
+  S.gaveUp=true;
+  S.done=true;
+  S.finished=Date.now();
+  S.studying=false;
+
+  document.getElementById('studyOverlay')?.classList.add('hidden');
+  document.getElementById('board')?.classList.remove('studying');
+
+  const phase=document.getElementById('phaseBanner');
+  if(phase){
+    phase.textContent='Incomplete';
+    phase.classList.remove('live');
+    phase.classList.add('incomplete');
+  }
+
+  // Preserve the time/moves they had when they surrendered.
+  const elapsed=secondsTaken();
+  if(!S.isTest){
+    localStorage.setItem(incompleteStorageKey(),JSON.stringify({
+      status:'incomplete',
+      moves:S.moves,
+      seconds:elapsed,
+      par:S.min,
+      difficulty:S.difficulty,
+      gridNumber:S.num,
+      gaveUpAt:Date.now()
+    }));
+  }
+
+  revealParPath();
+
+  document.getElementById('gMoves').textContent=S.moves;
+  document.getElementById('gPar').textContent=S.min;
+  document.getElementById('gTime').textContent=formatSec(elapsed);
+  document.getElementById('giveUpResult').classList.remove('hidden');
+}
+
+function finish(){
   S.done=true;S.finished=Date.now();clearInterval(S.timer);clock();
   if(S.soundOn) overloadSound();
 
