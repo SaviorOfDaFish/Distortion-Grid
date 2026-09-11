@@ -2,7 +2,7 @@ import './styles.css';
 import { initDiscord } from './discord.js';
 
 const D={N:[-1,0],E:[0,1],S:[1,0],W:[0,-1]}, O={N:'S',E:'W',S:'N',W:'E'}, ORD=['N','E','S','W'];
-let S={n:5,tiles:[],moves:0,start:null,done:false,finished:null,timer:null,num:1,min:1,key:'',isTest:false,difficulty:'Unstable',testIndex:0,crystalCount:1,branchAttempts:5,studyTimer:null,studyRemaining:15,studying:false,soundOn:true,lastPowered:new Set(),lastPoweredCrystals:new Set(),audioCtx:null,isDailyChampion:false,leaderboardSize:5,forcedDifficulty:'Auto',studySeconds:15};
+let S={n:5,tiles:[],moves:0,start:null,done:false,finished:null,timer:null,num:1,min:1,key:'',isTest:false,difficulty:'Unstable',testIndex:0,crystalCount:1,branchAttempts:5,studyTimer:null,studyRemaining:15,studying:false,soundOn:true,lastPowered:new Set(),lastPoweredCrystals:new Set(),audioCtx:null,isDailyChampion:false,leaderboardSize:5,forcedDifficulty:'Auto',studySeconds:15,gaveUp:false};
 
 function hash(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
 function rng(seed){return function(){let t=seed+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
@@ -601,7 +601,7 @@ function updateRecordPanel(){
   document.getElementById('recordTime').textContent=formatSec(rec.seconds);
 }
 
-function finish(){
+function incompleteStorageKey(){return 'dg_incomplete_'+S.key}\n\nfunction revealParPath(){\n  // rot=0 is the generator's solved orientation for every tile.\n  S.tiles.flat().forEach(t=>t.rot=0);\n  render();\n  const board=document.getElementById('board');\n  board?.classList.add('par-revealed');\n}\n\nfunction giveUp(){\n  if(S.done || S.gaveUp) return;\n\n  const ok=window.confirm(\n    'Give up on today\\'s Distortion?\\n\\nYour attempt will be marked Incomplete and the Par solution will be revealed.'\n  );\n  if(!ok) return;\n\n  clearInterval(S.timer);\n  clearInterval(S.studyTimer);\n\n  S.gaveUp=true;\n  S.done=true;\n  S.finished=Date.now();\n  S.studying=false;\n\n  document.getElementById('studyOverlay')?.classList.add('hidden');\n  document.getElementById('board')?.classList.remove('studying');\n\n  const phase=document.getElementById('phaseBanner');\n  if(phase){\n    phase.textContent='Incomplete';\n    phase.classList.remove('live');\n    phase.classList.add('incomplete');\n  }\n\n  // Preserve the time/moves they had when they surrendered.\n  const elapsed=secondsTaken();\n  if(!S.isTest){\n    localStorage.setItem(incompleteStorageKey(),JSON.stringify({\n      status:'incomplete',\n      moves:S.moves,\n      seconds:elapsed,\n      par:S.min,\n      difficulty:S.difficulty,\n      gridNumber:S.num,\n      gaveUpAt:Date.now()\n    }));\n  }\n\n  revealParPath();\n\n  document.getElementById('gMoves').textContent=S.moves;\n  document.getElementById('gPar').textContent=S.min;\n  document.getElementById('gTime').textContent=formatSec(elapsed);\n  document.getElementById('giveUpResult').classList.remove('hidden');\n}\n\nfunction finish(){
   S.done=true;S.finished=Date.now();clearInterval(S.timer);clock();
   if(S.soundOn) overloadSound();
 
@@ -658,7 +658,7 @@ function finish(){
 function reset(test=false){
   clearInterval(S.timer);
   clearInterval(S.studyTimer);
-  S.moves=0;S.start=null;S.done=false;S.finished=null;S.isTest=test;S.lastPowered=new Set();S.lastPoweredCrystals=new Set();S.isDailyChampion=false;
+  S.moves=0;S.start=null;S.done=false;S.finished=null;S.isTest=test;S.lastPowered=new Set();S.lastPoweredCrystals=new Set();S.isDailyChampion=false;S.gaveUp=false;
 
   if(test){
     S.testIndex=(S.testIndex+1)%DIFFICULTIES.length;
@@ -682,6 +682,8 @@ function reset(test=false){
   document.getElementById('par').textContent=S.min;
   document.getElementById('time').textContent='0:00';
   document.getElementById('result').classList.add('hidden');
+  document.getElementById('giveUpResult')?.classList.add('hidden');
+  document.getElementById('board')?.classList.remove('par-revealed');
   const nr=document.getElementById('newRecord'); if(nr) nr.classList.add('hidden'); const pn=document.getElementById('personalNote'); if(pn) pn.classList.add('hidden');
   const st=document.getElementById('status'); if(st) st.textContent='';
   updateRecordPanel();
@@ -789,7 +791,8 @@ document.getElementById('infoBtn').onclick=()=>document.getElementById('infoModa
 document.getElementById('closeInfo').onclick=()=>document.getElementById('infoModal').classList.add('hidden');
 document.getElementById('infoModal').addEventListener('click',e=>{if(e.target.id==='infoModal')document.getElementById('infoModal').classList.add('hidden')});
 
-document.getElementById('reset').onclick=()=>loadAdminSettings();
+document.getElementById('giveUp').onclick=giveUp;
+document.getElementById('closeGiveUp').onclick=()=>document.getElementById('giveUpResult').classList.add('hidden');
 reset(false);
 updateTestButton();
 document.getElementById('new').onclick=()=>reset(true);
