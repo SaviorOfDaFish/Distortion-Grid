@@ -7,6 +7,236 @@
   <script type="module" src="/src/main.js"></script>
 </head>
 <body>
-  <div id="app"></div>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <div class="eyebrow">MONSTER HUNT • DAILY PUZZLE</div>
+      <h1>Distortion Grid</h1>
+    </div>
+    <div class="meta">
+      <div id="gridNum">Grid #001</div>
+      <div id="difficultyBadge" class="badge">UNSTABLE</div>
+    </div>
+  </div>
+
+  <section class="hero hero-compact">
+    <div class="hero-titleline">
+      <div>
+        <div class="eyebrow">TODAY'S DISTORTION</div>
+        <h2>Stabilize the Grid</h2>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button id="adminBtn" class="admin-btn" aria-label="Admin" title="Admin controls">⚙</button>
+        <button id="soundBtn" class="info-btn" aria-label="Toggle sound" title="Toggle sound">🔊</button>
+        <button id="infoBtn" class="info-btn" aria-label="How to play">ⓘ</button>
+      </div>
+    </div>
+
+    <div class="competition-strip">
+      <div class="champ-mini" id="championCard" title="View Daily Top 5">
+        <div class="champ-label">👑 Daily Champion</div>
+        <div id="recordEmpty" class="champ-empty">No record yet</div>
+        <div id="recordData" class="hidden champ-data">
+          <b id="recordName">—</b>
+          <span><b id="recordMoves">—</b> moves • <b id="recordTime">—</b></span>
+        </div>
+      </div>
+
+      <div class="stats compact-stats">
+        <div class="stat"><span>Moves</span><b id="moves">0</b></div>
+        <div class="stat"><span>Par</span><b id="par" class="par-highlight">—</b></div>
+        <div class="stat"><span>Time</span><b id="time">0:00</b></div>
+        <div class="stat"><span>Streak</span><b id="streak">🔥 0</b></div>
+        <div class="stat phase-stat">
+          <span>Phase</span>
+          <b id="phaseBanner" class="phase-banner in-stat">Study 15s</b>
+        </div>
+      </div>
+    </div>
+  </section>
+<div class="mobile-game">
+    <div class="board-wrap">
+      <div id="board" class="board"></div>
+      <div id="collapseWave" class="collapse-wave"></div>
+      <div id="studyOverlay" class="study-overlay">
+        <div class="study-card">
+          <b id="studyCountdown">15</b>
+          <span>Study the grid</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="under-board">
+      <div class="mini-key">
+        <span title="Distortion Core">✦ Core</span>
+        <span title="Crystal checkpoint">◆ Crystal</span>
+        <span title="Stabilizer">◈ Goal</span>
+        <span title="Conduit">━ Path</span>
+      </div>
+      <div class="mini-actions">
+        <button class="action mini" id="reset">Reset</button>
+        <button class="action alt mini" id="new">Test</button>
+      </div>
+    </div>
+
+    <div class="prototype-name">
+      <input id="playerName" class="name-input" maxlength="32" value="Player" aria-label="Player name">
+    </div>
+  </div>
+</div>
+
+<div id="infoModal" class="result hidden">
+  <div class="modal info-modal">
+    <div class="eyebrow">DISTORTION GRID GUIDE</div>
+    <h2>How to Play</h2>
+    <p class="guide-copy">Rotate tiles 90° clockwise. Connect the Distortion Core to every Crystal, then reach the Stabilizer. Fewer moves wins; fastest time breaks ties.</p>
+
+    <div class="symbol-list">
+      <div class="symbol-row"><div class="symbol-badge">✦</div><div><b>Distortion Core</b><small>The energy source. Every puzzle begins here.</small></div></div>
+      <div class="symbol-row"><div class="symbol-badge">◆</div><div><b>Crystal</b><small>Required checkpoint. Every crystal must receive energy.</small></div></div>
+      <div class="symbol-row"><div class="symbol-badge">◈</div><div><b>Stabilizer</b><small>The final destination. Power it to finish.</small></div></div>
+      <div class="symbol-row"><div class="symbol-badge">━</div><div><b>Conduit</b><small>Rotatable energy path. Powered connections glow.</small></div></div>
+    </div>
+
+
+    <div class="card" style="margin-top:12px">
+      <h3 style="margin-top:0">Difficulty Levels</h3>
+      <div style="display:grid;gap:7px;color:var(--muted);font-size:.85rem">
+        <div><b style="color:#adffd0">Stable</b> — 4×4 grid, 1 crystal, fewer branches.</div>
+        <div><b style="color:#dccbff">Unstable</b> — 5×5 grid, 1 crystal, more branches.</div>
+        <div><b style="color:#ffe2a8">Fractured</b> — 6×6 grid, 2 crystals, heavier branching.</div>
+        <div><b style="color:#ffc0d1">Cataclysm</b> — 7×7 grid, 3 crystals, most complex layout.</div>
+      </div>
+    </div>
+
+    <button id="closeInfo" class="primary" style="width:100%;margin-top:14px">Got It</button>
+  </div>
+</div>
+
+
+
+
+<div id="adminLoginModal" class="result hidden">
+  <div class="modal" style="max-width:420px">
+    <div class="eyebrow">ADMIN ACCESS</div>
+    <h2>Enter Admin Password</h2>
+    <input id="adminPasswordInput" class="name-input" type="password" placeholder="Password" autocomplete="off">
+    <div class="actions">
+      <button id="adminLoginBtn" class="primary">Unlock</button>
+      <button id="adminLoginCancel" class="secondary">Cancel</button>
+    </div>
+    <p id="adminLoginStatus" class="share-status"></p>
+  </div>
+</div>
+
+<div id="adminPanelModal" class="result hidden">
+  <div class="modal" style="max-width:680px;max-height:92vh;overflow:auto">
+    <div class="eyebrow">DISTORTION GRID</div>
+    <h2>Admin Controls</h2>
+
+    <div class="admin-grid">
+      <div class="admin-field">
+        <label for="adminDifficulty">Force Difficulty</label>
+        <select id="adminDifficulty">
+          <option value="Auto">Auto / Weekly Random</option>
+          <option value="Stable">Stable</option>
+          <option value="Unstable">Unstable</option>
+          <option value="Fractured">Fractured</option>
+          <option value="Cataclysm">Cataclysm</option>
+        </select>
+      </div>
+
+      <div class="admin-field">
+        <label for="adminStudySeconds">Study Phase Seconds</label>
+        <input id="adminStudySeconds" type="number" min="5" max="60" step="1" value="15">
+      </div>
+
+      <div class="admin-field">
+        <label>Default Sound</label>
+        <div class="admin-toggle">
+          <span>Enable game sounds</span>
+          <input id="adminSoundDefault" type="checkbox" checked>
+        </div>
+      </div>
+
+      <div class="admin-field">
+        <label for="adminLeaderboardSize">Leaderboard Size</label>
+        <input id="adminLeaderboardSize" type="number" min="3" max="10" step="1" value="5">
+      </div>
+
+      <div class="admin-field">
+        <label for="adminPasswordChange">Change Prototype Password</label>
+        <input id="adminPasswordChange" type="password" placeholder="Leave blank to keep current">
+      </div>
+
+      <div class="admin-field">
+        <label>Current Puzzle</label>
+        <div style="color:var(--muted);font-size:.85rem;line-height:1.5">
+          <div>Difficulty: <b id="adminCurrentDifficulty" style="color:white">—</b></div>
+          <div>Par: <b id="adminCurrentPar" style="color:white">—</b></div>
+          <div>Grid: <b id="adminCurrentGrid" style="color:white">—</b></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="admin-actions">
+      <button id="adminSaveSettings" class="primary">Save Settings</button>
+      <button id="adminRegenerate" class="secondary">Regenerate Test Puzzle</button>
+      <button id="adminResetLeaderboard" class="secondary admin-danger">Reset Today’s Leaderboard</button>
+      <button id="adminResetTutorial" class="secondary">Reset Tutorial</button>
+      <button id="adminResetStreak" class="secondary">Reset Streak</button>
+      <button id="adminClearHistory" class="secondary admin-danger">Clear Personal History</button>
+    </div>
+
+    <p id="adminStatus" class="admin-status"></p>
+    <p class="admin-note">Prototype only: these controls are stored in this browser. In the real Discord Activity, admin access should be verified by your Discord user ID on the backend rather than by a password inside the page.</p>
+
+    <button id="adminClose" class="action alt" style="width:100%;margin-top:10px">Close Admin</button>
+  </div>
+</div>
+
+<div id="tutorialModal" class="tutorial-mask hidden">
+  <div class="tutorial-card">
+    <div class="eyebrow">FIRST DISTORTION</div>
+    <h2 style="margin:.35rem 0 .6rem">Quick Tutorial</h2>
+    <p class="guide-copy">You only see this once. The 15-second Study Phase starts after you close it.</p>
+    <div class="tutorial-step"><div class="tutorial-icon">✦</div><div><b>Start at the Core</b><span>Energy begins here. Rotate conduits to carry it across the grid.</span></div></div>
+    <div class="tutorial-step"><div class="tutorial-icon">◆</div><div><b>Power every Crystal</b><span>Every crystal is required. A crystal pulses when it becomes energized.</span></div></div>
+    <div class="tutorial-step"><div class="tutorial-icon">◈</div><div><b>Reach the Stabilizer</b><span>Power the goal after all crystals. Fewest moves wins; fastest time breaks ties.</span></div></div>
+    <button id="tutorialStart" class="primary" style="width:100%;margin-top:14px">Start My First Grid</button>
+  </div>
+</div>
+
+<div id="top5Modal" class="result hidden">
+  <div class="modal">
+    <div class="eyebrow">TODAY'S LEADERBOARD</div>
+    <h2>Daily Top 5</h2>
+    <p class="guide-copy">Fewest moves ranks first. Faster time breaks ties.</p>
+    <div id="top5List"></div>
+    <button id="closeTop5" class="primary" style="width:100%;margin-top:14px">Back to Grid</button>
+  </div>
+</div>
+
+<div id="result" class="result hidden">
+  <div class="modal">
+    <div class="eyebrow">DISTORTION STABILIZED</div>
+    <h2>Grid Complete!</h2>
+    <div class="resultstats" style="grid-template-columns:repeat(4,1fr)">
+      <div class="stat"><span>Moves</span><b id="rMoves">0</b></div>
+      <div class="stat"><span>Par</span><b id="rPar">0</b></div>
+      <div class="stat"><span>Time</span><b id="rTime">0:00</b></div>
+      <div class="stat"><span>Rating</span><b id="rStars">⭐⭐⭐</b></div>
+    </div>
+    <div id="newRecord" class="new-record hidden">👑 NEW DAILY CHAMPION!</div>
+    <div id="personalNote" class="personal-note hidden"></div>
+    <div id="shareText" class="sharebox"></div>
+    <div class="actions">
+      <button class="primary" id="share">Share Result</button>
+      <button class="secondary" id="copy">Copy for Discord</button>
+    </div>
+    <button class="action alt" id="close" style="width:100%;margin-top:10px">Close Result</button>
+    <p id="status"></p>
+  </div>
+</div>
 </body>
 </html>
