@@ -88,15 +88,6 @@ export async function initDatabase() {
     ON daily_attempts (attempt_date)
   `);
 
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS player_profiles (
-      discord_user_id TEXT PRIMARY KEY,
-      tutorial_completed_at TIMESTAMPTZ,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
   ready = true;
   console.log("✅ PostgreSQL connected; resumable daily_attempts table ready.");
 }
@@ -303,96 +294,6 @@ export async function finalizeDailyAttempt({
   return {
     finalized: false,
     attempt: await getDailyAttempt(discordUserId, attemptDate),
-  };
-}
-
-
-export async function getPlayerProfile(discordUserId) {
-  const db = getPool();
-
-  const result = await db.query(
-    `
-      SELECT discord_user_id, tutorial_completed_at, created_at, updated_at
-      FROM player_profiles
-      WHERE discord_user_id = $1
-      LIMIT 1
-    `,
-    [String(discordUserId)]
-  );
-
-  const row = result.rows[0];
-
-  if (!row) {
-    return {
-      discordUserId: String(discordUserId),
-      tutorialComplete: false,
-      tutorialCompletedAt: null,
-    };
-  }
-
-  return {
-    discordUserId: row.discord_user_id,
-    tutorialComplete: Boolean(row.tutorial_completed_at),
-    tutorialCompletedAt: row.tutorial_completed_at
-      ? new Date(row.tutorial_completed_at).toISOString()
-      : null,
-  };
-}
-
-export async function markTutorialComplete(discordUserId) {
-  const db = getPool();
-
-  const result = await db.query(
-    `
-      INSERT INTO player_profiles (
-        discord_user_id,
-        tutorial_completed_at,
-        created_at,
-        updated_at
-      )
-      VALUES ($1, NOW(), NOW(), NOW())
-      ON CONFLICT (discord_user_id)
-      DO UPDATE SET
-        tutorial_completed_at = NOW(),
-        updated_at = NOW()
-      RETURNING discord_user_id, tutorial_completed_at
-    `,
-    [String(discordUserId)]
-  );
-
-  const row = result.rows[0];
-
-  return {
-    discordUserId: row.discord_user_id,
-    tutorialComplete: true,
-    tutorialCompletedAt: new Date(row.tutorial_completed_at).toISOString(),
-  };
-}
-
-export async function resetTutorialComplete(discordUserId) {
-  const db = getPool();
-
-  await db.query(
-    `
-      INSERT INTO player_profiles (
-        discord_user_id,
-        tutorial_completed_at,
-        created_at,
-        updated_at
-      )
-      VALUES ($1, NULL, NOW(), NOW())
-      ON CONFLICT (discord_user_id)
-      DO UPDATE SET
-        tutorial_completed_at = NULL,
-        updated_at = NOW()
-    `,
-    [String(discordUserId)]
-  );
-
-  return {
-    discordUserId: String(discordUserId),
-    tutorialComplete: false,
-    tutorialCompletedAt: null,
   };
 }
 
