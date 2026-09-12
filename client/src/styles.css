@@ -771,3 +771,26 @@ html, body { width:100%; height:100%; min-height:100%; overflow:hidden; }
   .locker-grid{grid-template-columns:1fr}.cosmetic-card{grid-template-columns:58px 1fr auto;padding:8px;gap:8px}
   .cosmetic-preview{width:52px;height:48px}.locker-tab{font-size:.64rem;padding:6px 8px}
 }
+
+
+/* Result rating text needs to handle longer Distortion Grid terms. */
+.resultstats .rating-stat{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+}
+.resultstats .rating-stat #rStars{
+  font-size:clamp(.72rem,1.7vw,1rem);
+  line-height:1.15;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  text-wrap:balance;
+  max-width:100%;
+  margin-inline:auto;
+}
+@media(max-width:640px){
+  .resultstats .rating-stat #rStars{
+    font-size:.78rem;
+  }
+}
