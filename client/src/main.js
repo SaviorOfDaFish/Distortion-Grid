@@ -2,7 +2,7 @@ import './styles.css';
 import { initDiscord, getDiscordAuth, getDiscordAuthStatus } from './discord.js';
 
 const D={N:[-1,0],E:[0,1],S:[1,0],W:[0,-1]}, O={N:'S',E:'W',S:'N',W:'E'}, ORD=['N','E','S','W'];
-let S={n:5,tiles:[],moves:0,start:null,done:false,finished:null,timer:null,num:1,min:1,perfectMin:1,key:'',isTest:false,difficulty:'Unstable',testIndex:0,crystalCount:1,branchAttempts:5,studyTimer:null,studyRemaining:15,studying:false,soundOn:true,lastPowered:new Set(),lastPoweredCrystals:new Set(),audioCtx:null,isDailyChampion:false,leaderboardSize:5,forcedDifficulty:'Auto',studySeconds:15,gaveUp:false,activeLockerCategory:'trail',guidePaused:false,guidePauseStarted:null,guidePausedMs:0,tutorialMode:false,tutorialStep:0,tutorialPracticeLive:false,tutorialPracticeSolved:false};
+let S={n:5,tiles:[],moves:0,start:null,done:false,finished:null,timer:null,num:1,min:1,perfectMin:1,key:'',isTest:false,difficulty:'Unstable',testIndex:0,crystalCount:1,branchAttempts:5,studyTimer:null,studyRemaining:15,studying:false,soundOn:true,lastPowered:new Set(),lastPoweredCrystals:new Set(),audioCtx:null,isDailyChampion:false,leaderboardSize:5,forcedDifficulty:'Auto',studySeconds:15,gaveUp:false,activeLockerCategory:'trail',guidePaused:false,guidePauseStarted:null,guidePausedMs:0,tutorialMode:false,tutorialStep:0,tutorialPracticeLive:false,tutorialPracticeSolved:false,officialPreparing:false,serverAttempt:null,stateSaveTimer:null};
 
 function hash(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
 function rng(seed){return function(){let t=seed+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
@@ -126,10 +126,10 @@ function parseStoredAttempt(key){
 function getDailyAttempt(){
   // Prefer the authenticated Discord-user lock.
   const scoped=parseStoredAttempt(dailyAttemptStorageKey());
-  if(scoped) return scoped;
+  if(scoped && scoped.status!=='active') return scoped;
 
-  // Fallback prevents the puzzle from restarting while Discord auth is still loading.
-  return parseStoredAttempt(dailyAttemptFallbackKey());
+  const fallback=parseStoredAttempt(dailyAttemptFallbackKey());
+  return fallback && fallback.status!=='active' ? fallback : null;
 }
 
 function saveDailyAttempt(attempt){
@@ -170,6 +170,229 @@ function migrateBrowserDailyAttempt(){
 }
 
 
+
+function serializeOfficialBoardState(){
+  return {
+    n:S.n,
+    rotations:S.tiles.map(row=>row.map(t=>t.rot)),
+    moves:S.moves
+  };
+}
+
+function applyOfficialBoardState(state){
+  if(!state || !Array.isArray(state.rotations) || Number(state.n)!==S.n) return false;
+  if(state.rotations.length!==S.n) return false;
+
+  for(let r=0;r<S.n;r++){
+    if(!Array.isArray(state.rotations[r]) || state.rotations[r].length!==S.n) return false;
+
+    for(let c=0;c<S.n;c++){
+      const value=Number(state.rotations[r][c]);
+      if(Number.isFinite(value)) S.tiles[r][c].rot=((value%4)+4)%4;
+    }
+  }
+
+  S.moves=Math.max(0,Math.floor(Number(state.moves)||0));
+  return true;
+}
+
+async function authenticatedFetch(url,options={}){
+  let auth=getDiscordAuth();
+
+  if(!auth?.access_token){
+    auth=await initDiscord();
+  }
+
+  if(!auth?.access_token){
+    throw new Error('Discord authentication is not ready.');
+  }
+
+  return fetch(url,{
+    ...options,
+    headers:{
+      ...(options.headers||{}),
+      'Authorization':`Bearer ${auth.access_token}`
+    }
+  });
+}
+
+async function saveActiveAttemptState({keepalive=false}={}){
+  if(S.isTest || isAdminTestMode() || S.tutorialMode || S.done || S.gaveUp) return;
+  if(!S.serverAttempt || S.serverAttempt.status!=='active') return;
+
+  try{
+    const response=await authenticatedFetch('/api/attempts/state',{
+      method:'PUT',
+      keepalive,
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        moves:S.moves,
+        state:serializeOfficialBoardState()
+      })
+    });
+
+    if(!response.ok){
+      const data=await response.json().catch(()=>({}));
+      console.warn('Active attempt state save failed:',data.error||response.statusText);
+    }
+  }catch(error){
+    console.warn('Active attempt state save failed:',error);
+  }
+}
+
+function queueActiveAttemptSave(){
+  clearTimeout(S.stateSaveTimer);
+  S.stateSaveTimer=setTimeout(()=>{
+    S.stateSaveTimer=null;
+    saveActiveAttemptState();
+  },120);
+}
+
+function startServerStudyPhase(seconds){
+  clearInterval(S.studyTimer);
+  clearInterval(S.timer);
+
+  S.start=null;
+  S.studying=true;
+  S.studyRemaining=Math.max(1,Math.ceil(Number(seconds)||1));
+
+  const overlay=document.getElementById('studyOverlay');
+  const countdown=document.getElementById('studyCountdown');
+  const board=document.getElementById('board');
+  const phase=document.getElementById('phaseBanner');
+
+  board?.classList.add('studying');
+  overlay?.classList.remove('hidden');
+
+  if(countdown) countdown.textContent=String(S.studyRemaining);
+  if(phase){
+    phase.textContent=`Study ${S.studyRemaining}s`;
+    phase.classList.remove('live');
+  }
+
+  S.studyTimer=setInterval(()=>{
+    S.studyRemaining--;
+
+    if(countdown) countdown.textContent=String(Math.max(0,S.studyRemaining));
+    if(phase) phase.textContent=`Study ${Math.max(0,S.studyRemaining)}s`;
+
+    if(S.studyRemaining<=0){
+      clearInterval(S.studyTimer);
+      S.studying=false;
+      board?.classList.remove('studying');
+      overlay?.classList.add('hidden');
+
+      if(phase){
+        phase.textContent='Live';
+        phase.classList.add('live');
+      }
+
+      S.start=Date.now();
+      clearInterval(S.timer);
+      S.timer=setInterval(clock,250);
+      clock();
+    }
+  },1000);
+}
+
+function resumeServerLiveAttempt(attempt){
+  const elapsed=Math.max(0,Math.floor(Number(attempt?.seconds)||0));
+
+  S.studying=false;
+  S.start=Date.now()-(elapsed*1000);
+  S.done=false;
+
+  document.getElementById('studyOverlay')?.classList.add('hidden');
+  document.getElementById('board')?.classList.remove('studying');
+
+  const phase=document.getElementById('phaseBanner');
+  if(phase){
+    phase.textContent='Live';
+    phase.classList.add('live');
+  }
+
+  clearInterval(S.timer);
+  S.timer=setInterval(clock,250);
+  clock();
+}
+
+async function prepareOfficialAttempt(){
+  if(S.isTest || isAdminTestMode() || S.tutorialMode || S.officialPreparing) return;
+
+  S.officialPreparing=true;
+
+  try{
+    const response=await authenticatedFetch('/api/attempts/start',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        gridNumber:S.num,
+        difficulty:S.difficulty,
+        moves:S.moves,
+        par:S.min,
+        perfectMin:S.perfectMin,
+        studySeconds:S.studySeconds,
+        state:serializeOfficialBoardState()
+      })
+    });
+
+    const data=await response.json().catch(()=>({}));
+
+    if(!response.ok){
+      throw new Error(data.error||response.statusText||'Could not start the official attempt.');
+    }
+
+    const attempt=data.attempt;
+    S.serverAttempt=attempt;
+
+    if(!attempt){
+      throw new Error('Server did not return an official attempt.');
+    }
+
+    if(attempt.status==='complete' || attempt.status==='incomplete'){
+      saveDailyAttempt(attempt);
+      showDailyLock(attempt);
+      return;
+    }
+
+    if(attempt.status!=='active'){
+      throw new Error(`Unknown attempt status: ${attempt.status}`);
+    }
+
+    if(attempt.state){
+      applyOfficialBoardState(attempt.state);
+      document.getElementById('moves').textContent=String(S.moves);
+      render();
+      applyCosmetics();
+    }
+
+    localStorage.setItem(dailyAttemptFallbackKey(),JSON.stringify(attempt));
+    localStorage.setItem(dailyAttemptStorageKey(),JSON.stringify(attempt));
+
+    if(Number(attempt.studyRemainingSeconds)>0){
+      startServerStudyPhase(attempt.studyRemainingSeconds);
+    }else{
+      resumeServerLiveAttempt(attempt);
+    }
+  }catch(error){
+    console.error('Official attempt preparation failed:',error);
+
+    clearInterval(S.timer);
+    clearInterval(S.studyTimer);
+    S.studying=true;
+
+    const phase=document.getElementById('phaseBanner');
+    if(phase){
+      phase.textContent='Connecting…';
+      phase.classList.remove('live');
+    }
+
+    document.getElementById('board')?.classList.add('studying');
+  }finally{
+    S.officialPreparing=false;
+  }
+}
+
 async function fetchServerDailyAttempt(){
   if(isAdminTestMode() || S.isTest) return null;
 
@@ -199,22 +422,39 @@ async function fetchServerDailyAttempt(){
 }
 
 async function syncServerDailyAttempt(){
-  if(isAdminTestMode() || S.isTest) return false;
+  if(isAdminTestMode() || S.isTest || S.tutorialMode) return false;
 
   try{
     const attempt=await fetchServerDailyAttempt();
-
     if(!attempt) return false;
 
-    // Cache the server result locally for faster reopening on this device.
+    S.serverAttempt=attempt;
+
     localStorage.setItem(dailyAttemptFallbackKey(),JSON.stringify(attempt));
     localStorage.setItem(dailyAttemptStorageKey(),JSON.stringify(attempt));
 
     document.getElementById('result')?.classList.add('hidden');
     document.getElementById('giveUpResult')?.classList.add('hidden');
     document.getElementById('tutorialModal')?.classList.add('hidden');
-    document.getElementById('studyOverlay')?.classList.add('hidden');
 
+    if(attempt.status==='active'){
+      if(attempt.state){
+        applyOfficialBoardState(attempt.state);
+        document.getElementById('moves').textContent=String(S.moves);
+        render();
+        applyCosmetics();
+      }
+
+      if(Number(attempt.studyRemainingSeconds)>0){
+        startServerStudyPhase(attempt.studyRemainingSeconds);
+      }else{
+        resumeServerLiveAttempt(attempt);
+      }
+
+      return true;
+    }
+
+    document.getElementById('studyOverlay')?.classList.add('hidden');
     return showDailyLock(attempt);
   }catch(error){
     console.error('Server daily-attempt check failed:',error);
@@ -248,7 +488,8 @@ async function saveGiveUpToServer(incompleteAttempt){
         moves:incompleteAttempt.moves,
         par:incompleteAttempt.par,
         perfectMin:incompleteAttempt.perfectMin,
-        seconds:incompleteAttempt.seconds
+        seconds:incompleteAttempt.seconds,
+        state:serializeOfficialBoardState()
       })
     });
 
@@ -268,7 +509,7 @@ async function saveGiveUpToServer(incompleteAttempt){
 }
 
 function showDailyLock(attempt){
-  if(!attempt || isAdminTestMode()) return false;
+  if(!attempt || attempt.status==='active' || isAdminTestMode()) return false;
 
   clearInterval(S.timer);
   clearInterval(S.studyTimer);
@@ -1445,6 +1686,10 @@ function turn(r,c){
   S.moves++;
   render();
 
+  if(!S.tutorialMode && !S.isTest){
+    queueActiveAttemptSave();
+  }
+
   if(solved()){
     if(S.tutorialMode) finishTutorialPractice();
     else finish();
@@ -1728,7 +1973,8 @@ async function postCompletedResultToDiscord({
         rank,
         isChampion:S.isDailyChampion,
         isPerfect:S.moves===S.perfectMin,
-        isTest:S.isTest
+        isTest:S.isTest,
+        state:serializeOfficialBoardState()
       })
     });
 
@@ -1828,7 +2074,18 @@ function finish(){
 
   let st=(+localStorage.getItem('dg_streak')||0)+1;
   localStorage.setItem('dg_streak',st);
-  document.getElementById('streak').textContent='🔥 '+st;
+  
+window.addEventListener('pagehide',()=>{
+  saveActiveAttemptState({keepalive:true});
+});
+
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'){
+    saveActiveAttemptState({keepalive:true});
+  }
+});
+
+document.getElementById('streak').textContent='🔥 '+st;
 
   const myRank=Math.max(
     1,
@@ -1867,7 +2124,7 @@ function reset(test=false){
   const testMode=isAdminTestMode();
   test=!!test && testMode;
 
-  S.moves=0;S.start=null;S.done=false;S.finished=null;S.isTest=test;S.guidePaused=false;S.guidePauseStarted=null;S.guidePausedMs=0;S.lastPowered=new Set();S.lastPoweredCrystals=new Set();S.isDailyChampion=false;S.gaveUp=false;
+  S.moves=0;S.start=null;S.done=false;S.finished=null;S.isTest=test;S.guidePaused=false;S.guidePauseStarted=null;S.guidePausedMs=0;S.lastPowered=new Set();S.lastPoweredCrystals=new Set();S.isDailyChampion=false;S.gaveUp=false;S.serverAttempt=null;
 
   const guidedTutorialComplete=localStorage.getItem(TUTORIAL_COMPLETE_KEY)==='1';
 
@@ -1925,7 +2182,11 @@ function reset(test=false){
     return;
   }
 
-  startStudyPhase();
+  if(test){
+    startStudyPhase();
+  }else{
+    prepareOfficialAttempt();
+  }
 }
 
 
