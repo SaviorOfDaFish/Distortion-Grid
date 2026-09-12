@@ -169,6 +169,104 @@ function migrateBrowserDailyAttempt(){
   localStorage.removeItem(browserKey);
 }
 
+
+async function fetchServerDailyAttempt(){
+  if(isAdminTestMode() || S.isTest) return null;
+
+  let auth=getDiscordAuth();
+
+  if(!auth?.access_token){
+    auth=await initDiscord();
+  }
+
+  if(!auth?.access_token){
+    throw new Error('Discord authentication is not ready.');
+  }
+
+  const response=await fetch('/api/attempts/today',{
+    headers:{
+      'Authorization':`Bearer ${auth.access_token}`
+    }
+  });
+
+  const data=await response.json().catch(()=>({}));
+
+  if(!response.ok){
+    throw new Error(data.error||response.statusText||"Could not check today's attempt.");
+  }
+
+  return data.attempt||null;
+}
+
+async function syncServerDailyAttempt(){
+  if(isAdminTestMode() || S.isTest) return false;
+
+  try{
+    const attempt=await fetchServerDailyAttempt();
+
+    if(!attempt) return false;
+
+    // Cache the server result locally for faster reopening on this device.
+    localStorage.setItem(dailyAttemptFallbackKey(),JSON.stringify(attempt));
+    localStorage.setItem(dailyAttemptStorageKey(),JSON.stringify(attempt));
+
+    document.getElementById('result')?.classList.add('hidden');
+    document.getElementById('giveUpResult')?.classList.add('hidden');
+    document.getElementById('tutorialModal')?.classList.add('hidden');
+    document.getElementById('studyOverlay')?.classList.add('hidden');
+
+    return showDailyLock(attempt);
+  }catch(error){
+    console.error('Server daily-attempt check failed:',error);
+    return false;
+  }
+}
+
+async function saveGiveUpToServer(incompleteAttempt){
+  if(S.isTest || isAdminTestMode()) return;
+
+  try{
+    let auth=getDiscordAuth();
+
+    if(!auth?.access_token){
+      auth=await initDiscord();
+    }
+
+    if(!auth?.access_token){
+      throw new Error('Discord authentication is not ready.');
+    }
+
+    const response=await fetch('/api/attempts/give-up',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':`Bearer ${auth.access_token}`
+      },
+      body:JSON.stringify({
+        gridNumber:incompleteAttempt.gridNumber,
+        difficulty:incompleteAttempt.difficulty,
+        moves:incompleteAttempt.moves,
+        par:incompleteAttempt.par,
+        perfectMin:incompleteAttempt.perfectMin,
+        seconds:incompleteAttempt.seconds
+      })
+    });
+
+    const data=await response.json().catch(()=>({}));
+
+    if(!response.ok){
+      throw new Error(data.error||response.statusText||'Could not save Give Up.');
+    }
+
+    if(data.attempt){
+      localStorage.setItem(dailyAttemptFallbackKey(),JSON.stringify(data.attempt));
+      localStorage.setItem(dailyAttemptStorageKey(),JSON.stringify(data.attempt));
+    }
+  }catch(error){
+    console.error('Server Give Up persistence failed:',error);
+  }
+}
+
 function showDailyLock(attempt){
   if(!attempt || isAdminTestMode()) return false;
 
@@ -1110,6 +1208,7 @@ function giveUp(){
 
     localStorage.setItem(incompleteStorageKey(),JSON.stringify(incompleteAttempt));
     saveDailyAttempt(incompleteAttempt);
+    saveGiveUpToServer(incompleteAttempt);
   }
 
   revealParPath();
@@ -1524,7 +1623,7 @@ document.getElementById('adminToggleTestMode').onclick=()=>{
 
 let resetEverythingArmedUntil=0;
 
-document.getElementById('adminResetEverything').onclick=()=>{
+document.getElementById('adminResetEverything').onclick=async()=>{
   const btn=document.getElementById('adminResetEverything');
   const now=Date.now();
 
@@ -1548,6 +1647,32 @@ document.getElementById('adminResetEverything').onclick=()=>{
   btn.disabled=true;
   btn.textContent='Resetting…';
   adminMessage('Clearing all Distortion Grid data…');
+
+  // For the configured admin, also clear today's server-authoritative
+  // official attempt so Reset Everything really gives you a clean test state.
+  try{
+    let auth=getDiscordAuth();
+
+    if(!auth?.access_token){
+      auth=await initDiscord();
+    }
+
+    if(auth?.access_token){
+      const response=await fetch('/api/admin/today-attempt',{
+        method:'DELETE',
+        headers:{
+          'Authorization':`Bearer ${auth.access_token}`
+        }
+      });
+
+      if(!response.ok && response.status!==404){
+        const data=await response.json().catch(()=>({}));
+        console.warn('Server daily-attempt reset failed:',data.error||response.statusText);
+      }
+    }
+  }catch(error){
+    console.warn('Could not reset server daily attempt:',error);
+  }
 
   // Clear every Distortion Grid key, including daily locks and Test Mode.
   const keysToRemove=[];
@@ -1731,7 +1856,7 @@ function updateDiscordStatusBadge(detail){
 
 ensureDiscordStatusBadge();
 
-initDiscord().then(auth=>{
+initDiscord().then(async auth=>{
   updateDiscordStatusBadge({stage:'connected',user:auth?.user});
   const user=auth?.user;
   const displayName=user?.global_name||user?.username;
@@ -1750,15 +1875,14 @@ initDiscord().then(auth=>{
   migrateBrowserDailyAttempt();
 
   if(!isAdminTestMode()){
-    const attempt=getDailyAttempt();
+    // Local lock is an instant fallback, PostgreSQL is the cross-device authority.
+    const localAttempt=getDailyAttempt();
 
-    if(attempt){
-      document.getElementById('result')?.classList.add('hidden');
-      document.getElementById('giveUpResult')?.classList.add('hidden');
-      document.getElementById('tutorialModal')?.classList.add('hidden');
-      document.getElementById('studyOverlay')?.classList.add('hidden');
-      showDailyLock(attempt);
+    if(localAttempt){
+      showDailyLock(localAttempt);
     }
+
+    await syncServerDailyAttempt();
   }
 }).catch(err=>{
   console.error('Discord SDK authentication failed:',err);
