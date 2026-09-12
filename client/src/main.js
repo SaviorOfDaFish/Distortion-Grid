@@ -130,7 +130,10 @@ function getEquippedCosmetics(){
   }
 }
 function saveEquippedCosmetics(equipped){localStorage.setItem(COSMETIC_STORAGE_KEY,JSON.stringify(equipped))}
-function cosmeticUnlocked(item){return item.req(getCosmeticStats())}
+function cosmeticUnlocked(item){
+  if(localStorage.getItem('dg_admin_unlock_all_cosmetics')==='1') return true;
+  return item.req(getCosmeticStats());
+}
 function rarityClass(rarity){return 'rarity-'+String(rarity).toLowerCase()}
 function trailPalette(id){
   return {
@@ -1093,6 +1096,45 @@ document.getElementById('adminResetStreak').onclick=()=>{
 document.getElementById('adminClearHistory').onclick=()=>{
   localStorage.removeItem(historyStorageKey());
   adminMessage('Personal performance history cleared.');
+};
+
+document.getElementById('adminUnlockCosmetics').onclick=()=>{
+  localStorage.setItem('dg_admin_unlock_all_cosmetics','1');
+  renderLocker();
+  applyCosmetics();
+  adminMessage('All cosmetics unlocked for testing on this browser.');
+};
+
+document.getElementById('adminResetEverything').onclick=()=>{
+  const confirmed=window.confirm(
+    'Reset EVERYTHING for Distortion Grid on this browser?\n\n' +
+    'This clears cosmetics, cosmetic progress, streaks, tutorial status, ' +
+    'leaderboards, personal history, test records, and admin settings.\n\n' +
+    'This cannot be undone.'
+  );
+
+  if(!confirmed) return;
+
+  const keysToRemove=[];
+  for(let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i);
+    if(
+      key &&
+      (
+        key.startsWith('dg_') ||
+        key.startsWith('distortion_')
+      )
+    ){
+      keysToRemove.push(key);
+    }
+  }
+
+  keysToRemove.forEach(key=>localStorage.removeItem(key));
+
+  // Restore the default prototype admin password after the reset.
+  localStorage.setItem('dg_admin_password','distortion123');
+
+  window.location.reload();
 };
 
 
