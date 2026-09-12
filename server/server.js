@@ -277,6 +277,8 @@ app.post("/api/activity-result", async (req, res) => {
       : "Unknown",
     moves: Math.max(0, Math.floor(Number(body.moves) || 0)),
     par: Math.max(0, Math.floor(Number(body.par) || 0)),
+    perfectMin: Math.max(0, Math.floor(Number(body.perfectMin) || 0)),
+    scoreLabel: String(body.scoreLabel || "").slice(0, 40),
     seconds: Math.max(0, Math.floor(Number(body.seconds) || 0)),
     streak: Math.max(0, Math.floor(Number(body.streak) || 0)),
     rank: body.rank == null ? null : Math.max(1, Math.floor(Number(body.rank) || 1)),

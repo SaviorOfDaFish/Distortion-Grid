@@ -206,6 +206,8 @@ export async function postDistortionResult(result) {
     difficulty = "Unknown",
     moves = 0,
     par = 0,
+    perfectMin = 0,
+    scoreLabel = "",
     seconds = 0,
     streak = 0,
     rank = null,
@@ -215,12 +217,28 @@ export async function postDistortionResult(result) {
   } = result;
 
   const moveDelta = Number(moves) - Number(par);
+
+  let golfLabel = scoreLabel;
+
+  if (!golfLabel) {
+    if (Number(perfectMin) > 0 && Number(moves) === Number(perfectMin)) golfLabel = "HOLE-IN-ONE";
+    else if (moveDelta <= -3) golfLabel = "Albatross";
+    else if (moveDelta === -2) golfLabel = "Eagle";
+    else if (moveDelta === -1) golfLabel = "Birdie";
+    else if (moveDelta === 0) golfLabel = "Par";
+    else if (moveDelta === 1) golfLabel = "Bogey";
+    else if (moveDelta === 2) golfLabel = "Double Bogey";
+    else golfLabel = `+${moveDelta} Over Par`;
+  }
+
   const parText =
-    moveDelta === 0
-      ? "✨ PERFECT — exactly Par!"
-      : moveDelta > 0
-        ? `+${moveDelta} over Par`
-        : `${Math.abs(moveDelta)} under Par`;
+    Number(perfectMin) > 0 && Number(moves) === Number(perfectMin)
+      ? "🎯 Perfect Route"
+      : moveDelta === 0
+        ? "Exactly Par"
+        : moveDelta > 0
+          ? `+${moveDelta} over Par`
+          : `${Math.abs(moveDelta)} under Par`;
 
   const title = isChampion
     ? "👑 NEW DAILY CHAMPION"
@@ -240,7 +258,8 @@ export async function postDistortionResult(result) {
         `**Distortion Grid #${String(gridNumber).padStart(3, "0")}**`,
         `**${difficulty}**`,
         "",
-        `🔄 **${moves} moves** • Par ${par} • ${parText}`,
+        `🔄 **${moves} moves** • Par ${par}`,
+        `⛳ **${golfLabel}** • ${parText}`,
         `⏱️ **${formatTime(seconds)}**   🔥 **${streak} streak**`,
         rank ? `🏆 **Daily Rank #${rank}**` : null,
         isPerfect ? "💫 **Perfect Stabilization!**" : null,
