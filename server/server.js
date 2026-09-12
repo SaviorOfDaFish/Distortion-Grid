@@ -427,6 +427,56 @@ async function getDiscordUserFromBearer(req) {
 }
 
 /**
+ * Single startup/bootstrap endpoint.
+ * Returns tutorial state and today's official attempt in one authenticated request.
+ */
+app.get("/api/player/bootstrap", async (req, res) => {
+  if (!isDatabaseReady()) {
+    return res.status(503).json({
+      ok: false,
+      error: "Database is still connecting.",
+    });
+  }
+
+  try {
+    const user = await getDiscordUserFromBearer(req);
+
+    let [profile, attempt] = await Promise.all([
+      getPlayerProfile(user.id),
+      getDailyAttempt(user.id),
+    ]);
+
+    // Any official attempt proves the player has passed onboarding.
+    // Backfill older accounts created before player_profiles existed.
+    if (attempt && !profile.tutorialComplete) {
+      profile = await markTutorialComplete(user.id);
+      console.log(
+        `[Bootstrap] Backfilled tutorial completion for ${user.username}.`
+      );
+    }
+
+    return res.json({
+      ok: true,
+      player: {
+        id: user.id,
+        username: user.username,
+        displayName: user.global_name || user.username,
+      },
+      tutorialComplete: profile.tutorialComplete,
+      tutorialCompletedAt: profile.tutorialCompletedAt,
+      attempt,
+    });
+  } catch (error) {
+    console.error("Player bootstrap failed:", error);
+
+    return res.status(error.status || 500).json({
+      ok: false,
+      error: error.message || "Could not load the Distortion Grid profile.",
+    });
+  }
+});
+
+/**
  * Cross-device tutorial status for the authenticated Discord player.
  */
 app.get("/api/player/tutorial", async (req, res) => {
