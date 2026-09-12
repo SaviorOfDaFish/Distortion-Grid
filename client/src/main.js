@@ -2,7 +2,7 @@ import './styles.css';
 import { initDiscord } from './discord.js';
 
 const D={N:[-1,0],E:[0,1],S:[1,0],W:[0,-1]}, O={N:'S',E:'W',S:'N',W:'E'}, ORD=['N','E','S','W'];
-let S={n:5,tiles:[],moves:0,start:null,done:false,finished:null,timer:null,num:1,min:1,key:'',isTest:false,difficulty:'Unstable',testIndex:0,crystalCount:1,branchAttempts:5,studyTimer:null,studyRemaining:15,studying:false,soundOn:true,lastPowered:new Set(),lastPoweredCrystals:new Set(),audioCtx:null,isDailyChampion:false,leaderboardSize:5,forcedDifficulty:'Auto',studySeconds:15,gaveUp:false};
+let S={n:5,tiles:[],moves:0,start:null,done:false,finished:null,timer:null,num:1,min:1,key:'',isTest:false,difficulty:'Unstable',testIndex:0,crystalCount:1,branchAttempts:5,studyTimer:null,studyRemaining:15,studying:false,soundOn:true,lastPowered:new Set(),lastPoweredCrystals:new Set(),audioCtx:null,isDailyChampion:false,leaderboardSize:5,forcedDifficulty:'Auto',studySeconds:15,gaveUp:false,activeLockerCategory:'trail'};
 
 function hash(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
 function rng(seed){return function(){let t=seed+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
@@ -64,6 +64,182 @@ function adminMessage(msg){
   const el=document.getElementById('adminStatus');
   el.textContent=msg;
   setTimeout(()=>{if(el.textContent===msg)el.textContent=''},2600);
+}
+
+
+const COSMETIC_STORAGE_KEY='dg_cosmetics_v1';
+const COSMETIC_STATS_KEY='dg_cosmetic_stats_v1';
+
+const COSMETIC_CATEGORIES=[
+  ['trail','Energy Trails'],
+  ['frame','Board Frames'],
+  ['crystal','Crystal Skins'],
+  ['core','Core Skins'],
+  ['goal','Goal Skins'],
+  ['effect','Completion Effects']
+];
+
+const COSMETICS={
+  trail:[
+    {id:'default',name:'Distortion Current',rarity:'Common',desc:'The standard difficulty-colored energy trail.',req:()=>true,requirement:'Unlocked by default.'},
+    {id:'void',name:'Void Current',rarity:'Rare',desc:'Deep violet energy with a cold blue edge.',req:s=>s.unstableClears>=3,requirement:'Complete 3 Unstable grids.'},
+    {id:'solar',name:'Solar Flare',rarity:'Epic',desc:'Hot orange energy fading into brilliant gold.',req:s=>s.fracturedClears>=3,requirement:'Complete 3 Fractured grids.'},
+    {id:'cataclysm',name:'Cataclysm Pulse',rarity:'Legendary',desc:'Violent crimson-magenta distortion energy.',req:s=>s.cataclysmClears>=3,requirement:'Complete 3 Cataclysm grids.'},
+    {id:'champion',name:'Champion Gold',rarity:'Champion',desc:'Prestigious molten-gold energy reserved for winners.',req:s=>s.championWins>=3,requirement:'Become Daily Champion 3 times.'}
+  ],
+  frame:[
+    {id:'default',name:'Standard Grid',rarity:'Common',desc:'Clean dark Distortion Grid border.',req:()=>true,requirement:'Unlocked by default.'},
+    {id:'fractured',name:'Fractured Glass',rarity:'Rare',desc:'Cracked luminous edges around the board.',req:s=>s.fracturedClears>=5,requirement:'Complete 5 Fractured grids.'},
+    {id:'rift',name:'Cataclysm Rift',rarity:'Legendary',desc:'A red-magenta rift burns around the grid.',req:s=>s.cataclysmClears>=5,requirement:'Complete 5 Cataclysm grids.'},
+    {id:'gold',name:'Champion Frame',rarity:'Champion',desc:'A bright gold frame showing leaderboard prestige.',req:s=>s.championWins>=5,requirement:'Become Daily Champion 5 times.'}
+  ],
+  crystal:[
+    {id:'default',name:'Distortion Crystal',rarity:'Common',desc:'The classic required checkpoint.',req:()=>true,requirement:'Unlocked by default.'},
+    {id:'prism',name:'Prism Crystal',rarity:'Rare',desc:'A radiant rainbow-white prism checkpoint.',req:s=>s.perfectSolves>=3,requirement:'Earn 3 Perfect solves.'},
+    {id:'ember',name:'Ember Crystal',rarity:'Epic',desc:'A burning orange crystal with a molten aura.',req:s=>s.fracturedClears>=4,requirement:'Complete 4 Fractured grids.'},
+    {id:'void',name:'Void Crystal',rarity:'Legendary',desc:'A black-violet crystal that bends nearby light.',req:s=>s.cataclysmClears>=4,requirement:'Complete 4 Cataclysm grids.'}
+  ],
+  core:[
+    {id:'default',name:'Distortion Core',rarity:'Common',desc:'The standard source of the grid energy.',req:()=>true,requirement:'Unlocked by default.'},
+    {id:'pulsar',name:'Pulsar Core',rarity:'Rare',desc:'A compact cyan star pulsing with energy.',req:s=>s.bestStreak>=7,requirement:'Reach a 7-day streak.'},
+    {id:'blackstar',name:'Black Star',rarity:'Legendary',desc:'A dark stellar core surrounded by a violet corona.',req:s=>s.cataclysmClears>=5,requirement:'Complete 5 Cataclysm grids.'}
+  ],
+  goal:[
+    {id:'default',name:'Stabilizer',rarity:'Common',desc:'The standard final destination.',req:()=>true,requirement:'Unlocked by default.'},
+    {id:'portal',name:'Rift Portal',rarity:'Rare',desc:'A circular dimensional gate replaces the goal.',req:s=>s.totalClears>=10,requirement:'Complete 10 grids.'},
+    {id:'crown',name:'Crown Gate',rarity:'Champion',desc:'A golden champion gate at the end of the route.',req:s=>s.championWins>=5,requirement:'Become Daily Champion 5 times.'}
+  ],
+  effect:[
+    {id:'default',name:'Stabilization Surge',rarity:'Common',desc:'The standard board-wide energy surge.',req:()=>true,requirement:'Unlocked by default.'},
+    {id:'galaxy',name:'Galaxy Burst',rarity:'Rare',desc:'A violet-cyan starburst erupts from the grid.',req:s=>s.totalClears>=5,requirement:'Complete 5 grids.'},
+    {id:'gold',name:'Golden Collapse',rarity:'Epic',desc:'The grid collapses inward in a brilliant golden flash.',req:s=>s.perfectSolves>=10,requirement:'Earn 10 Perfect solves.'},
+    {id:'storm',name:'Cataclysm Storm',rarity:'Legendary',desc:'Red-magenta electrical arcs storm across the board.',req:s=>s.cataclysmClears>=5,requirement:'Complete 5 Cataclysm grids.'}
+  ]
+};
+
+function defaultCosmeticStats(){
+  return {totalClears:0,perfectSolves:0,championWins:0,bestStreak:0,stableClears:0,unstableClears:0,fracturedClears:0,cataclysmClears:0};
+}
+function getCosmeticStats(){
+  try{return {...defaultCosmeticStats(),...JSON.parse(localStorage.getItem(COSMETIC_STATS_KEY)||'{}')}}catch{return defaultCosmeticStats()}
+}
+function saveCosmeticStats(stats){localStorage.setItem(COSMETIC_STATS_KEY,JSON.stringify(stats))}
+function getEquippedCosmetics(){
+  try{return {trail:'default',frame:'default',crystal:'default',core:'default',goal:'default',effect:'default',...JSON.parse(localStorage.getItem(COSMETIC_STORAGE_KEY)||'{}')}}catch{
+    return {trail:'default',frame:'default',crystal:'default',core:'default',goal:'default',effect:'default'};
+  }
+}
+function saveEquippedCosmetics(equipped){localStorage.setItem(COSMETIC_STORAGE_KEY,JSON.stringify(equipped))}
+function cosmeticUnlocked(item){return item.req(getCosmeticStats())}
+function rarityClass(rarity){return 'rarity-'+String(rarity).toLowerCase()}
+function trailPalette(id){
+  return {
+    void:['#7c3cff','#57c7ff','#7c3cffaa'],
+    solar:['#ff6a2a','#ffd75e','#ff9a3daa'],
+    cataclysm:['#ff235f','#ff43dd','#ff235faa'],
+    champion:['#ffb51b','#fff2a8','#ffc32aaa']
+  }[id]||null;
+}
+function applyCosmetics(){
+  const equipped=getEquippedCosmetics();
+  const body=document.body;
+  const board=document.getElementById('board');
+  body.dataset.trail=equipped.trail;
+  body.dataset.frame=equipped.frame;
+  body.dataset.crystalSkin=equipped.crystal;
+  body.dataset.coreSkin=equipped.core;
+  body.dataset.goalSkin=equipped.goal;
+  body.dataset.completionEffect=equipped.effect;
+  const palette=trailPalette(equipped.trail);
+  if(palette){
+    body.style.setProperty('--energyA',palette[0]);
+    body.style.setProperty('--energyB',palette[1]);
+    body.style.setProperty('--accentGlow',palette[2]);
+  }else{
+    const palettes={
+      Stable:['#69b7ff','#8fffe8','#78e9ff88'],
+      Unstable:['#9b6cff','#63e6ff','#7b66ff88'],
+      Fractured:['#ff9a4d','#d378ff','#ff9a4d88'],
+      Cataclysm:['#ff4f8b','#ff7b5e','#ff3f7188']
+    };
+    const p=palettes[S.difficulty]||palettes.Unstable;
+    body.style.setProperty('--energyA',p[0]);
+    body.style.setProperty('--energyB',p[1]);
+    body.style.setProperty('--accentGlow',p[2]);
+  }
+  if(board){
+    board.classList.remove('frame-default','frame-fractured','frame-rift','frame-gold');
+    board.classList.add('frame-'+equipped.frame);
+  }
+}
+function updateCosmeticProgressAfterClear(){
+  const stats=getCosmeticStats();
+  stats.totalClears+=1;
+  const key=S.difficulty.toLowerCase()+'Clears';
+  if(key in stats) stats[key]+=1;
+  if(S.moves===S.min) stats.perfectSolves+=1;
+  if(S.isDailyChampion) stats.championWins+=1;
+  const streak=Number(localStorage.getItem('dg_streak')||0)+1;
+  stats.bestStreak=Math.max(stats.bestStreak,streak);
+  saveCosmeticStats(stats);
+}
+function cosmeticPreview(category,id){
+  if(category==='trail') return `<div class="cosmetic-preview preview-trail trail-${id}"><span></span></div>`;
+  if(category==='frame') return `<div class="cosmetic-preview preview-frame frame-${id}"><div></div></div>`;
+  if(category==='crystal') return `<div class="cosmetic-preview preview-symbol crystal-${id}">◆</div>`;
+  if(category==='core') return `<div class="cosmetic-preview preview-symbol core-${id}">✦</div>`;
+  if(category==='goal') return `<div class="cosmetic-preview preview-symbol goal-${id}">${id==='portal'?'◎':id==='crown'?'♛':'◈'}</div>`;
+  return `<div class="cosmetic-preview preview-effect effect-${id}">✧</div>`;
+}
+function renderLocker(){
+  const equipped=getEquippedCosmetics();
+  const stats=getCosmeticStats();
+  const summary=document.getElementById('lockerSummary');
+  const tabs=document.getElementById('lockerTabs');
+  const grid=document.getElementById('lockerGrid');
+  if(!summary||!tabs||!grid)return;
+  const all=Object.values(COSMETICS).flat();
+  const unlocked=all.filter(c=>cosmeticUnlocked(c)).length;
+  summary.innerHTML=`
+    <div><span>Unlocked</span><b>${unlocked}/${all.length}</b></div>
+    <div><span>Clears</span><b>${stats.totalClears}</b></div>
+    <div><span>Perfect</span><b>${stats.perfectSolves}</b></div>
+    <div><span>Champion</span><b>${stats.championWins}</b></div>`;
+  tabs.innerHTML='';
+  COSMETIC_CATEGORIES.forEach(([id,label])=>{
+    const btn=document.createElement('button');
+    btn.className='locker-tab'+(S.activeLockerCategory===id?' active':'');
+    btn.textContent=label;
+    btn.onclick=()=>{S.activeLockerCategory=id;renderLocker()};
+    tabs.appendChild(btn);
+  });
+  grid.innerHTML='';
+  COSMETICS[S.activeLockerCategory].forEach(item=>{
+    const unlocked=cosmeticUnlocked(item);
+    const isEquipped=equipped[S.activeLockerCategory]===item.id;
+    const card=document.createElement('div');
+    card.className=`cosmetic-card ${rarityClass(item.rarity)} ${unlocked?'unlocked':'locked'} ${isEquipped?'equipped':''}`;
+    card.innerHTML=`
+      ${cosmeticPreview(S.activeLockerCategory,item.id)}
+      <div class="cosmetic-card-body">
+        <div class="cosmetic-name-row"><b>${item.name}</b><span class="rarity-pill ${rarityClass(item.rarity)}">${item.rarity}</span></div>
+        <p>${item.desc}</p>
+        <small>${unlocked?(isEquipped?'✓ Currently equipped':item.requirement):'🔒 '+item.requirement}</small>
+      </div>
+      <button class="cosmetic-equip ${isEquipped?'equipped':''}" ${unlocked?'':'disabled'}>${isEquipped?'Equipped':unlocked?'Equip':'Locked'}</button>`;
+    const equipBtn=card.querySelector('.cosmetic-equip');
+    if(unlocked&&!isEquipped){
+      equipBtn.onclick=()=>{
+        const next=getEquippedCosmetics();
+        next[S.activeLockerCategory]=item.id;
+        saveEquippedCosmetics(next);
+        applyCosmetics();
+        render();
+        renderLocker();
+      };
+    }
+    grid.appendChild(card);
+  });
 }
 
 const DIFFICULTIES = ['Stable','Unstable','Fractured','Cataclysm'];
@@ -157,6 +333,7 @@ function applyDifficulty(name){
   }
   document.body.classList.remove('theme-stable','theme-unstable','theme-fractured','theme-cataclysm');
   document.body.classList.add('theme-'+name.toLowerCase());
+  applyCosmetics();
 }
 
 function rotate(ds,k){return ds.map(d=>ORD[(ORD.indexOf(d)+k)%4])}
@@ -762,6 +939,7 @@ function finish(){
   // Local prototype leaderboard. Real Activity will use the shared backend.
   const rows=addLeaderboardResult(name,S.moves,sec);
   S.isDailyChampion=rows.length>0 && rows[0].name===name && rows[0].moves===S.moves && rows[0].seconds===sec;
+  updateCosmeticProgressAfterClear();
 
   if(isRecord){
     localStorage.setItem(recordStorageKey(),JSON.stringify({name,moves:S.moves,seconds:sec}));
@@ -771,9 +949,14 @@ function finish(){
   // The solved route triggers a stabilization surge across the entire board.
   const board=document.getElementById('board');
   lightWholeBoardForCompletion();
+  const equippedCosmetics=getEquippedCosmetics();
+  board.classList.remove('effect-default','effect-galaxy','effect-gold','effect-storm');
+  board.classList.add('effect-'+equippedCosmetics.effect);
   board.classList.add('complete-surge');
   const wave=document.getElementById('collapseWave');
-  wave.classList.remove('go'); void wave.offsetWidth; wave.classList.add('go');
+  wave.className='collapse-wave effect-'+equippedCosmetics.effect;
+  void wave.offsetWidth;
+  wave.classList.add('go');
 
   document.getElementById('rMoves').textContent=S.moves;
   document.getElementById('rPar').textContent=S.min;
@@ -831,6 +1014,7 @@ function reset(test=false){
   updateRecordPanel();
   updateTestButton();
   render();
+  applyCosmetics();
   const seenTutorial=localStorage.getItem('dg_tutorial_seen_v1')==='1';
   if(!seenTutorial && !test){
     clearInterval(S.studyTimer);
@@ -910,6 +1094,17 @@ document.getElementById('adminClearHistory').onclick=()=>{
   localStorage.removeItem(historyStorageKey());
   adminMessage('Personal performance history cleared.');
 };
+
+
+document.getElementById('lockerBtn').onclick=()=>{
+  renderLocker();
+  document.getElementById('lockerModal').classList.remove('hidden');
+};
+document.getElementById('closeLocker').onclick=()=>document.getElementById('lockerModal').classList.add('hidden');
+document.getElementById('closeLockerX').onclick=()=>document.getElementById('lockerModal').classList.add('hidden');
+document.getElementById('lockerModal').addEventListener('click',e=>{
+  if(e.target.id==='lockerModal') document.getElementById('lockerModal').classList.add('hidden');
+});
 
 const soundBtn=document.getElementById('soundBtn');
 if(soundBtn){

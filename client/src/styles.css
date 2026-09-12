@@ -605,9 +605,7 @@ body.theme-cataclysm{--energyA:#ff4f8b;--energyB:#ff7b5e;--accentGlow:#ff3f7188}
   .admin-grid{grid-template-columns:1fr}
 }
 
-
-
-/* GitHub / Discord Activity layout fixes */
+\n\n/* GitHub / Discord Activity layout fixes */
 html, body { width:100%; height:100%; min-height:100%; overflow:hidden; }
 .wrap { height:100dvh; max-height:100dvh; overflow:hidden; }
 .mobile-game { flex:1 1 0; min-height:0; overflow:hidden; }
@@ -647,48 +645,82 @@ html, body { width:100%; height:100%; min-height:100%; overflow:hidden; }
     height:min(100%, calc(100dvh - 156px)) !important;
   }
 }
+\n\n/* Give Up / Par reveal */\n.give-up-btn{\n  background:#351421!important;\n  border-color:#a43f62!important;\n  color:#ffd2df!important;\n}\n.give-up-btn:hover{\n  background:#4a192b!important;\n  border-color:#e15b84!important;\n}\n.incomplete-label{color:#ff86a8!important}\n.give-up-note{\n  margin-top:12px;\n  padding:10px 12px;\n  border-radius:12px;\n  background:#2b101aaa;\n  border:1px solid #8f3751;\n  color:#ffc6d5;\n  font-size:.84rem;\n  line-height:1.4;\n}\n.phase-banner.incomplete{\n  background:#351421!important;\n  border-color:#a43f62!important;\n  color:#ffd2df!important;\n}\n.board.par-revealed .tile{\n  border-color:rgba(114,255,193,.28);\n  box-shadow:inset 0 0 12px rgba(114,255,193,.05);\n}\n.board.par-revealed .seg.on{\n  background:linear-gradient(90deg,#72ffc1,#71e7ff)!important;\n  box-shadow:0 0 14px #72ffc1,0 0 24px #71e7ff88!important;\n}\n.board.par-revealed .node.on{\n  background:#fff!important;\n  box-shadow:0 0 12px #72ffc1,0 0 26px #71e7ff!important;\n}\n.board.par-revealed .tile.core,\n.board.par-revealed .tile.crystal,\n.board.par-revealed .tile.exit{\n  box-shadow:inset 0 0 24px rgba(114,255,193,.14),0 0 8px rgba(113,231,255,.18)!important;\n}\n
 
-
-/* Give Up / Par reveal */
-.give-up-btn{
-  background:#351421!important;
-  border-color:#a43f62!important;
-  color:#ffd2df!important;
-}
-.give-up-btn:hover{
-  background:#4a192b!important;
-  border-color:#e15b84!important;
-}
-.incomplete-label{color:#ff86a8!important}
-.give-up-note{
-  margin-top:12px;
-  padding:10px 12px;
-  border-radius:12px;
-  background:#2b101aaa;
-  border:1px solid #8f3751;
-  color:#ffc6d5;
-  font-size:.84rem;
-  line-height:1.4;
-}
-.phase-banner.incomplete{
-  background:#351421!important;
-  border-color:#a43f62!important;
-  color:#ffd2df!important;
-}
-.board.par-revealed .tile{
-  border-color:rgba(114,255,193,.28);
-  box-shadow:inset 0 0 12px rgba(114,255,193,.05);
-}
-.board.par-revealed .seg.on{
-  background:linear-gradient(90deg,#72ffc1,#71e7ff)!important;
-  box-shadow:0 0 14px #72ffc1,0 0 24px #71e7ff88!important;
-}
-.board.par-revealed .node.on{
-  background:#fff!important;
-  box-shadow:0 0 12px #72ffc1,0 0 26px #71e7ff!important;
-}
-.board.par-revealed .tile.core,
-.board.par-revealed .tile.crystal,
-.board.par-revealed .tile.exit{
-  box-shadow:inset 0 0 24px rgba(114,255,193,.14),0 0 8px rgba(113,231,255,.18)!important;
+/* COSMETIC LOCKER */
+.locker-btn{border-color:#7c61b6!important;color:#d8cbff!important;text-shadow:0 0 9px #a875ff}
+.locker-modal{width:min(820px,100%);max-height:92vh;overflow:auto}
+.locker-heading{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.locker-heading h2{margin:.25rem 0 .4rem}
+.locker-close{width:34px;height:34px;border-radius:10px;border:1px solid #ffffff18;background:#100b1b;color:white;font-size:1.25rem;cursor:pointer}
+.locker-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:12px 0}
+.locker-summary div{text-align:center;padding:8px;border-radius:11px;background:#090711aa;border:1px solid #ffffff10}
+.locker-summary span{display:block;color:var(--muted);font-size:.62rem;text-transform:uppercase}
+.locker-summary b{display:block;margin-top:2px;font-size:1rem}
+.locker-tabs{display:flex;gap:6px;overflow:auto;padding-bottom:5px;margin-bottom:8px}
+.locker-tab{flex:0 0 auto;border-radius:999px;padding:7px 10px;border:1px solid #ffffff15;background:#0e0a18;color:var(--muted);font-weight:800;font-size:.72rem;cursor:pointer}
+.locker-tab.active{background:#2b1945;color:white;border-color:#9a72d8;box-shadow:0 0 12px #7c50d333}
+.locker-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.cosmetic-card{display:grid;grid-template-columns:72px 1fr auto;gap:10px;align-items:center;padding:10px;border-radius:14px;background:#0a0712cc;border:1px solid #ffffff12;position:relative;overflow:hidden}
+.cosmetic-card.locked{filter:saturate(.45);opacity:.68}
+.cosmetic-card.equipped{border-color:#8deaff88;box-shadow:0 0 18px #6fdcff1c inset}
+.cosmetic-card.rarity-rare{border-color:#4a8cff55}
+.cosmetic-card.rarity-epic{border-color:#aa66ff66}
+.cosmetic-card.rarity-legendary{border-color:#ff9a3d77}
+.cosmetic-card.rarity-champion{border-color:#ffd35a99;box-shadow:0 0 16px #ffc53315 inset}
+.cosmetic-card-body{min-width:0}
+.cosmetic-name-row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.cosmetic-card-body p{margin:4px 0;color:var(--muted);font-size:.77rem;line-height:1.3}
+.cosmetic-card-body small{color:#c8bada;font-size:.67rem}
+.rarity-pill{padding:2px 6px;border-radius:999px;font-size:.57rem;text-transform:uppercase;letter-spacing:.05em}
+.rarity-pill.rarity-common{background:#302a3d;color:#ddd5e8}
+.rarity-pill.rarity-rare{background:#12365c;color:#8ec8ff}
+.rarity-pill.rarity-epic{background:#38205a;color:#d2a5ff}
+.rarity-pill.rarity-legendary{background:#5a2e10;color:#ffc176}
+.rarity-pill.rarity-champion{background:#59470c;color:#ffe26f}
+.cosmetic-equip{border-radius:9px;padding:7px 9px;border:1px solid #674e88;background:#20162e;color:white;font-size:.68rem;font-weight:900;cursor:pointer}
+.cosmetic-equip:disabled{cursor:not-allowed;opacity:.55}
+.cosmetic-equip.equipped{background:#123b49;border-color:#4ec8e9;color:#bdf5ff}
+.cosmetic-preview{width:64px;height:58px;border-radius:11px;background:#100b19;border:1px solid #ffffff10}
+.preview-trail{display:grid;place-items:center;padding:10px}
+.preview-trail span{display:block;width:100%;height:9px;border-radius:999px;background:linear-gradient(90deg,var(--energyA),var(--energyB));box-shadow:0 0 13px var(--energyA)}
+.preview-trail.trail-void span{background:linear-gradient(90deg,#7c3cff,#57c7ff);box-shadow:0 0 13px #7c3cff}
+.preview-trail.trail-solar span{background:linear-gradient(90deg,#ff6a2a,#ffd75e);box-shadow:0 0 13px #ff8533}
+.preview-trail.trail-cataclysm span{background:linear-gradient(90deg,#ff235f,#ff43dd);box-shadow:0 0 13px #ff235f}
+.preview-trail.trail-champion span{background:linear-gradient(90deg,#ffb51b,#fff2a8);box-shadow:0 0 13px #ffd34e}
+.preview-frame{padding:7px}.preview-frame div{width:100%;height:100%;border:2px solid #6d5688;border-radius:8px}
+.preview-frame.frame-fractured div{border-color:#d27cff;box-shadow:0 0 10px #ff9a4d,inset 0 0 10px #b65aff}
+.preview-frame.frame-rift div{border-color:#ff3f71;box-shadow:0 0 13px #ff235f,inset 0 0 9px #ff43dd}
+.preview-frame.frame-gold div{border-color:#ffd34f;box-shadow:0 0 13px #ffc52e,inset 0 0 9px #fff0a0}
+.preview-symbol,.preview-effect{display:grid;place-items:center;font-size:2rem;font-weight:900}
+.preview-symbol.crystal-prism{color:white;text-shadow:0 0 7px #6dfcff,0 0 15px #cf6cff}
+.preview-symbol.crystal-ember{color:#ffad50;text-shadow:0 0 10px #ff4f23}
+.preview-symbol.crystal-void{color:#1c0d29;text-shadow:0 0 6px white,0 0 14px #8c45ff}
+.preview-symbol.core-pulsar{color:#bffaff;text-shadow:0 0 8px #52dfff,0 0 18px #7b65ff}
+.preview-symbol.core-blackstar{color:#08030d;text-shadow:0 0 6px #fff,0 0 18px #a948ff}
+.preview-symbol.goal-portal{color:#72edff;text-shadow:0 0 12px #6a77ff}
+.preview-symbol.goal-crown{color:#ffd95c;text-shadow:0 0 12px #ffb51b}
+.preview-effect.effect-galaxy{color:#b985ff;text-shadow:0 0 10px #5be9ff,0 0 20px #9b6cff}
+.preview-effect.effect-gold{color:#ffe47b;text-shadow:0 0 14px #ffb51b}
+.preview-effect.effect-storm{color:#ff5b92;text-shadow:0 0 12px #ff235f,0 0 22px #ff43dd}
+.board.frame-fractured{border-color:#c66cff!important;box-shadow:0 0 18px #ff8d3b44,inset 0 0 28px #a75cff22!important}
+.board.frame-rift{border-color:#ff3f71!important;box-shadow:0 0 22px #ff235f55,inset 0 0 30px #ff43dd20!important}
+.board.frame-gold{border-color:#ffd34f!important;box-shadow:0 0 20px #ffc52e55,inset 0 0 28px #fff0a01c!important}
+.tile.skin-crystal-prism .icon{color:#fff;text-shadow:0 0 6px #55e9ff,0 0 14px #c469ff,0 0 22px #fff}
+.tile.skin-crystal-ember .icon{color:#ffbd64;text-shadow:0 0 8px #ff5a25,0 0 18px #ff9a35}
+.tile.skin-crystal-void .icon{color:#160822;text-shadow:0 0 5px #fff,0 0 13px #934aff}
+.tile.skin-core-pulsar .icon{color:#d8fdff;text-shadow:0 0 7px #5aeaff,0 0 17px #697aff,0 0 25px #fff}
+.tile.skin-core-blackstar .icon{color:#09030c;text-shadow:0 0 5px #fff,0 0 15px #a64cff,0 0 25px #5932ff}
+.tile.skin-goal-portal .icon{color:#a4f7ff;text-shadow:0 0 8px #57ddff,0 0 19px #735dff}
+.tile.skin-goal-crown .icon{color:#ffe077;text-shadow:0 0 7px #ffb51b,0 0 18px #fff0a0}
+.board.effect-galaxy.complete-surge{animation:galaxyCosmeticSurge 1.15s ease-in-out}
+.board.effect-gold.complete-surge{animation:goldCosmeticSurge 1.05s ease-in-out}
+.board.effect-storm.complete-surge{animation:stormCosmeticSurge 1.25s ease-in-out}
+@keyframes galaxyCosmeticSurge{0%{filter:brightness(1) hue-rotate(0)}35%{filter:brightness(2) saturate(1.7) hue-rotate(35deg);transform:scale(1.01)}100%{filter:brightness(1) hue-rotate(0);transform:scale(1)}}
+@keyframes goldCosmeticSurge{0%{filter:brightness(1)}40%{filter:brightness(2.4) sepia(.65) saturate(2);transform:scale(1.01)}100%{filter:brightness(1);transform:scale(1)}}
+@keyframes stormCosmeticSurge{0%,100%{filter:brightness(1);transform:translateX(0)}18%{filter:brightness(1.7);transform:translateX(-2px)}34%{transform:translateX(2px)}52%{filter:brightness(2.15) saturate(1.7);transform:translateX(-1px)}70%{transform:translateX(1px)}}
+@media(max-width:640px){
+  .locker-modal{padding:15px}.locker-summary{grid-template-columns:repeat(4,1fr);gap:4px}.locker-summary div{padding:6px 3px}
+  .locker-grid{grid-template-columns:1fr}.cosmetic-card{grid-template-columns:58px 1fr auto;padding:8px;gap:8px}
+  .cosmetic-preview{width:52px;height:48px}.locker-tab{font-size:.64rem;padding:6px 8px}
 }
