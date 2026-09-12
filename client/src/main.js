@@ -183,7 +183,7 @@ function gen(seed){
   const R=rng(seed), n=S.n;
 
   const T=Array.from({length:n},(_,r)=>Array.from({length:n},(_,c)=>({
-    r,c,base:[],rot:0,kind:'normal',on:false,required:true
+    r,c,base:[],rot:0,kind:'decoy',on:false,required:false
   })));
 
   function con(a,b){
@@ -193,150 +193,161 @@ function gen(seed){
     if(!T[b.r][b.c].base.includes(O[d])) T[b.r][b.c].base.push(O[d]);
   }
 
-  function rowSnake(){
-    const p=[];
+  function shuffle(arr){
+    const out=[...arr];
+    for(let i=out.length-1;i>0;i--){
+      const j=Math.floor(R()*(i+1));
+      [out[i],out[j]]=[out[j],out[i]];
+    }
+    return out;
+  }
+
+  function borderCells(){
+    const cells=[];
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+      if(r===0||c===0||r===n-1||c===n-1) cells.push({r,c});
+    }
+    return cells;
+  }
+
+  const routeRatio={Stable:[0.42,0.52],Unstable:[0.50,0.62],Fractured:[0.56,0.68],Cataclysm:[0.62,0.74]};
+  const [lo,hi]=routeRatio[S.difficulty]||routeRatio.Unstable;
+  const targetLen=Math.max(
+    S.crystalCount+3,
+    Math.min(n*n-2,Math.round(n*n*(lo+R()*(hi-lo))))
+  );
+
+  function findRoute(){
+    const starts=shuffle(borderCells());
+
+    for(const start of starts){
+      const path=[start];
+      const used=new Set([`${start.r},${start.c}`]);
+
+      function walk(){
+        if(path.length>=targetLen){
+          const end=path[path.length-1];
+          const distance=Math.abs(end.r-start.r)+Math.abs(end.c-start.c);
+          return distance>=Math.max(2,Math.floor(n/2));
+        }
+
+        const cur=path[path.length-1];
+        let neighbors=[];
+        for(const d of ORD){
+          const [dr,dc]=D[d];
+          const nr=cur.r+dr,nc=cur.c+dc;
+          if(nr<0||nr>=n||nc<0||nc>=n) continue;
+          const key=`${nr},${nc}`;
+          if(used.has(key)) continue;
+          neighbors.push({r:nr,c:nc,d});
+        }
+
+        // Prefer moves that keep several future choices open so the route winds
+        // through the board instead of trapping itself immediately.
+        neighbors=shuffle(neighbors).sort((a,b)=>{
+          const freeCount=p=>ORD.reduce((count,d)=>{
+            const [dr,dc]=D[d],rr=p.r+dr,cc=p.c+dc;
+            return count+(rr>=0&&rr<n&&cc>=0&&cc<n&&!used.has(`${rr},${cc}`)?1:0);
+          },0);
+          return freeCount(b)-freeCount(a);
+        });
+
+        for(const next of neighbors){
+          const key=`${next.r},${next.c}`;
+          used.add(key);path.push({r:next.r,c:next.c});
+          if(walk()) return true;
+          path.pop();used.delete(key);
+        }
+        return false;
+      }
+
+      if(walk()) return path;
+    }
+    return null;
+  }
+
+  let path=findRoute();
+
+  // Guaranteed fallback: take only part of a snake route, never the whole board.
+  if(!path){
+    const snake=[];
     for(let r=0;r<n;r++){
-      const cols=(r%2===0)
+      const cols=r%2===0
         ? Array.from({length:n},(_,i)=>i)
         : Array.from({length:n},(_,i)=>n-1-i);
-      for(const c of cols) p.push({r,c});
+      cols.forEach(c=>snake.push({r,c}));
     }
-    return p;
+    const maxStart=Math.max(0,snake.length-targetLen);
+    const cut=Math.floor(R()*(maxStart+1));
+    path=snake.slice(cut,cut+targetLen);
+    if(R()<.5) path.reverse();
   }
 
-  function columnSnake(){
-    const p=[];
-    for(let c=0;c<n;c++){
-      const rows=(c%2===0)
-        ? Array.from({length:n},(_,i)=>i)
-        : Array.from({length:n},(_,i)=>n-1-i);
-      for(const r of rows) p.push({r,c});
-    }
-    return p;
-  }
-
-  function spiral(){
-    const p=[];
-    let top=0,bottom=n-1,left=0,right=n-1;
-    while(top<=bottom && left<=right){
-      for(let c=left;c<=right;c++) p.push({r:top,c});
-      top++;
-      for(let r=top;r<=bottom;r++) p.push({r,c:right});
-      right--;
-      if(top<=bottom){
-        for(let c=right;c>=left;c--) p.push({r:bottom,c});
-        bottom--;
-      }
-      if(left<=right){
-        for(let r=bottom;r>=top;r--) p.push({r,c:left});
-        left++;
-      }
-    }
-    return p;
-  }
-
-  function transformPath(path, mode){
-    return path.map(({r,c})=>{
-      if(mode===1) return {r:n-1-r,c};
-      if(mode===2) return {r,c:n-1-c};
-      if(mode===3) return {r:n-1-r,c:n-1-c};
-      if(mode===4) return {r:c,c:r};
-      if(mode===5) return {r:n-1-c,c:r};
-      if(mode===6) return {r:c,c:n-1-r};
-      if(mode===7) return {r:n-1-c,c:n-1-r};
-      return {r,c};
-    });
-  }
-
-  // Use several full-grid single-path templates, then transform/reverse them
-  // from the daily seed so the route changes while remaining guaranteed valid.
-  const templates=[rowSnake(),columnSnake(),spiral()];
-  let path=templates[Math.floor(R()*templates.length)];
-  path=transformPath(path,Math.floor(R()*8));
-
-  // Remove accidental duplicate cells from a transformed template fallback.
-  // All supported transforms should preserve uniqueness, but this keeps generation safe.
-  const unique=new Set(path.map(p=>`${p.r},${p.c}`));
-  if(unique.size!==n*n){
-    path=(n%2===0?columnSnake():rowSnake());
-  }
-
-  if(R()<0.5) path=[...path].reverse();
-
-  // Build exactly ONE continuous path through every tile.
+  // Build only the hidden official route.
+  path.forEach(p=>{
+    T[p.r][p.c].required=true;
+    T[p.r][p.c].kind='normal';
+  });
   for(let i=0;i<path.length-1;i++) con(path[i],path[i+1]);
 
-  const start=path[0];
-  const end=path[path.length-1];
+  const startCell=path[0];
+  const endCell=path[path.length-1];
+  T[startCell.r][startCell.c].kind='core';
+  T[endCell.r][endCell.c].kind='exit';
 
-  T[start.r][start.c].kind='core';
-  T[end.r][end.c].kind='exit';
-
-  // Crystals are positioned in order along the one official route.
+  // Required crystals appear in route order.
   for(let i=1;i<=S.crystalCount;i++){
-    const idx=Math.max(
-      1,
-      Math.min(
-        path.length-2,
-        Math.round((path.length-1)*(i/(S.crystalCount+1)))
-      )
-    );
+    const idx=Math.max(1,Math.min(path.length-2,Math.round((path.length-1)*(i/(S.crystalCount+1)))));
     const cp=path[idx];
     if(T[cp.r][cp.c].kind==='normal') T[cp.r][cp.c].kind='crystal';
   }
 
-  // Scramble every tile. Because every tile belongs to the single path,
-  // Par is the exact minimum number of clockwise rotations needed to restore it.
-  const minParByDifficulty={Stable:10,Unstable:18,Fractured:30,Cataclysm:45};
-  const targetPar=minParByDifficulty[S.difficulty]||18;
+  // Fill every unused tile with a plausible decoy piece.
+  const decoys=[
+    ['N','S'],['E','W'],['N','E'],['E','S'],['S','W'],['W','N'],
+    ['N'],['E'],['S'],['W'],
+    ['N','E','S'],['E','S','W'],['S','W','N'],['W','N','E']
+  ];
+  for(const t of T.flat()){
+    if(!t.required){
+      t.base=[...decoys[Math.floor(R()*decoys.length)]];
+      t.kind='decoy';
+    }
+  }
 
-  let bestPar=-1;
-  let bestRots=null;
+  // Par counts ONLY the real hidden route. Decoys never inflate the official Par.
+  const minParByDifficulty={Stable:8,Unstable:14,Fractured:22,Cataclysm:32};
+  const targetPar=minParByDifficulty[S.difficulty]||14;
+  let bestPar=-1,bestRots=null;
 
-  for(let attempt=0;attempt<120;attempt++){
+  for(let attempt=0;attempt<160;attempt++){
     let par=0;
     const rots=[];
-
     for(let r=0;r<n;r++){
       rots[r]=[];
       for(let c=0;c<n;c++){
         const t=T[r][c];
-
         let rot;
-        if(S.difficulty==='Stable'){
-          rot=Math.floor(R()*4);
+        if(t.required){
+          rot=S.difficulty==='Stable' ? Math.floor(R()*4) : 1+Math.floor(R()*3);
         }else{
-          // Favor unsolved orientations on harder modes.
-          rot=1+Math.floor(R()*3);
+          rot=Math.floor(R()*4);
         }
-
         t.rot=rot;
         rots[r][c]=rot;
-        par+=clockwiseDistanceToSolved(t);
+        if(t.required) par+=clockwiseDistanceToSolved(t);
       }
     }
-
-    if(par>bestPar){
-      bestPar=par;
-      bestRots=rots.map(row=>[...row]);
-    }
-
+    if(par>bestPar){bestPar=par;bestRots=rots.map(row=>[...row]);}
     if(par>=targetPar) break;
   }
 
   if(bestRots){
-    for(let r=0;r<n;r++){
-      for(let c=0;c<n;c++){
-        T[r][c].rot=bestRots[r][c];
-      }
-    }
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++) T[r][c].rot=bestRots[r][c];
   }
 
-  let exactPar=0;
-  for(const t of T.flat()) exactPar+=clockwiseDistanceToSolved(t);
-
   S.tiles=T;
-  S.min=Math.max(1,exactPar);
+  S.min=Math.max(1,T.flat().filter(t=>t.required).reduce((sum,t)=>sum+clockwiseDistanceToSolved(t),0));
 }
 function tileEl(t){
   let b=document.createElement('button');b.className='tile '+t.kind;b.dataset.r=t.r;b.dataset.c=t.c;
@@ -540,16 +551,15 @@ function solved(){
   flow();
 
   const all=S.tiles.flat();
-  const e=all.find(t=>t.kind==='exit');
+  const route=all.filter(t=>t.required);
+  const goal=all.find(t=>t.kind==='exit');
   const crystals=all.filter(t=>t.kind==='crystal');
 
-  // PATH PUZZLE RULE:
-  // Every tile must match its intended orientation so the board forms
-  // one continuous route with no branches or alternate network solution.
-  const exactPath=all.every(t=>sameDirs(dirs(t),t.base));
-  const allPowered=all.every(t=>t.on);
+  // Only the official hidden route needs to be solved. Decoy tiles are optional.
+  const routeOriented=route.every(t=>sameDirs(dirs(t),t.base));
+  const routePowered=route.every(t=>t.on);
 
-  return exactPath && allPowered && e?.on && crystals.every(c=>c.on);
+  return routeOriented && routePowered && goal?.on && crystals.every(c=>c.on);
 }
 function turn(r,c){if(S.done||S.studying)return;startClock();let t=S.tiles[r][c];t.rot=(t.rot+1)%4;S.moves++;render();if(solved())finish()}
 function stars(){let x=S.moves/S.min;return x<=1.15?'⭐⭐⭐':x<=1.6?'⭐⭐':'⭐'}
@@ -665,8 +675,10 @@ function incompleteStorageKey(){
 }
 
 function revealParPath(){
-  // rot=0 reveals the exact single Par path from Core through the Crystal(s) to the Goal.
-  S.tiles.flat().forEach(t=>t.rot=0);
+  // Reveal only the official Core → Crystal(s) → Goal Par route.
+  S.tiles.flat().forEach(t=>{
+    if(t.required) t.rot=0;
+  });
   render();
   const board=document.getElementById('board');
   board?.classList.add('par-revealed');
@@ -720,6 +732,20 @@ function giveUp(){
   document.getElementById('giveUpResult').classList.remove('hidden');
 }
 
+function lightWholeBoardForCompletion(){
+  const board=document.getElementById('board');
+  if(!board) return;
+
+  // Once the real route reaches the Goal, the stabilized Distortion surges
+  // through every visible tile as a reward animation. This does not affect Par.
+  board.querySelectorAll('.tile').forEach(el=>{
+    el.style.boxShadow='0 0 22px var(--energyA) inset,0 0 13px var(--accentGlow)';
+    el.querySelectorAll('.seg').forEach(seg=>seg.classList.add('on'));
+    el.querySelector('.node')?.classList.add('on');
+    el.classList.add('on-complete');
+  });
+}
+
 function finish(){
   S.done=true;S.finished=Date.now();clearInterval(S.timer);clock();
   if(S.soundOn) overloadSound();
@@ -742,12 +768,9 @@ function finish(){
   }
   updateRecordPanel();
 
-  // Full-board completion effect.
+  // The solved route triggers a stabilization surge across the entire board.
   const board=document.getElementById('board');
-  board.querySelectorAll('.tile').forEach(el=>{
-    const t=S.tiles[+el.dataset.r][+el.dataset.c];
-    if(t.on) el.classList.add('on-complete');
-  });
+  lightWholeBoardForCompletion();
   board.classList.add('complete-surge');
   const wave=document.getElementById('collapseWave');
   wave.classList.remove('go'); void wave.offsetWidth; wave.classList.add('go');
