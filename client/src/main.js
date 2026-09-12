@@ -2,7 +2,7 @@ import './styles.css';
 import { initDiscord, getDiscordAuth, getDiscordAuthStatus } from './discord.js';
 
 const D={N:[-1,0],E:[0,1],S:[1,0],W:[0,-1]}, O={N:'S',E:'W',S:'N',W:'E'}, ORD=['N','E','S','W'];
-let S={n:5,tiles:[],moves:0,start:null,done:false,finished:null,timer:null,num:1,min:1,perfectMin:1,key:'',isTest:false,difficulty:'Unstable',testIndex:0,crystalCount:1,branchAttempts:5,studyTimer:null,studyRemaining:15,studying:false,soundOn:true,lastPowered:new Set(),lastPoweredCrystals:new Set(),audioCtx:null,isDailyChampion:false,leaderboardSize:5,forcedDifficulty:'Auto',studySeconds:15,gaveUp:false,activeLockerCategory:'trail'};
+let S={n:5,tiles:[],moves:0,start:null,done:false,finished:null,timer:null,num:1,min:1,perfectMin:1,key:'',isTest:false,difficulty:'Unstable',testIndex:0,crystalCount:1,branchAttempts:5,studyTimer:null,studyRemaining:15,studying:false,soundOn:true,lastPowered:new Set(),lastPoweredCrystals:new Set(),audioCtx:null,isDailyChampion:false,leaderboardSize:5,forcedDifficulty:'Auto',studySeconds:15,gaveUp:false,activeLockerCategory:'trail',guidePaused:false,guidePauseStarted:null,guidePausedMs:0};
 
 function hash(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
 function rng(seed){return function(){let t=seed+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
@@ -81,26 +81,26 @@ function parAllowance(){
   }[S.difficulty] || 3;
 }
 
-function golfScore(moves=S.moves){
+function distortionScore(moves=S.moves){
   if(moves===S.perfectMin){
     return {
-      key:'ace',
-      label:'🎯 HOLE-IN-ONE!',
-      short:'HOLE-IN-ONE',
-      detail:'Perfect Route'
+      key:'perfect-stabilization',
+      label:'✨ PERFECT STABILIZATION',
+      short:'Perfect Stabilization',
+      detail:'Exact minimum route'
     };
   }
 
   const delta=moves-S.min;
 
-  if(delta<=-3) return {key:'albatross',label:'🪽 ALBATROSS',short:'Albatross',detail:`${Math.abs(delta)} under Par`};
-  if(delta===-2) return {key:'eagle',label:'🦅 EAGLE',short:'Eagle',detail:'2 under Par'};
-  if(delta===-1) return {key:'birdie',label:'🐦 BIRDIE',short:'Birdie',detail:'1 under Par'};
-  if(delta===0) return {key:'par',label:'⛳ PAR',short:'Par',detail:'Exactly Par'};
-  if(delta===1) return {key:'bogey',label:'Bogey',short:'Bogey',detail:'1 over Par'};
-  if(delta===2) return {key:'double-bogey',label:'Double Bogey',short:'Double Bogey',detail:'2 over Par'};
-  if(delta===3) return {key:'triple-bogey',label:'Triple Bogey',short:'Triple Bogey',detail:'3 over Par'};
-  return {key:'over-par',label:`+${delta} OVER PAR`,short:`+${delta}`,detail:`${delta} over Par`};
+  if(delta<=-3) return {key:'reality-break',label:'🌌 REALITY BREAK',short:'Reality Break',detail:`${Math.abs(delta)} under Par`};
+  if(delta===-2) return {key:'rift-mastery',label:'🌀 RIFT MASTERY',short:'Rift Mastery',detail:'2 under Par'};
+  if(delta===-1) return {key:'distortion-surge',label:'⚡ DISTORTION SURGE',short:'Distortion Surge',detail:'1 under Par'};
+  if(delta===0) return {key:'stabilized',label:'◆ STABILIZED',short:'Stabilized',detail:'Exactly Par'};
+  if(delta===1) return {key:'minor-instability',label:'⚠ MINOR INSTABILITY',short:'Minor Instability',detail:'1 over Par'};
+  if(delta===2) return {key:'major-instability',label:'⚠ MAJOR INSTABILITY',short:'Major Instability',detail:'2 over Par'};
+  if(delta===3) return {key:'critical-instability',label:'🚨 CRITICAL INSTABILITY',short:'Critical Instability',detail:'3 over Par'};
+  return {key:'unstable',label:`🚨 UNSTABLE +${delta}`,short:`Unstable +${delta}`,detail:`${delta} over Par`};
 }
 
 function officialPlayerId(){
@@ -833,10 +833,20 @@ function startStudyPhase(){
 }
 
 function startClock(){
-  if(S.studying||S.start)return;S.start=Date.now();S.timer=setInterval(clock,250)
+  if(S.studying||S.start)return;
+  S.start=Date.now();
+
+  if(!document.getElementById('infoModal')?.classList.contains('hidden')){
+    S.guidePaused=true;
+    S.guidePauseStarted=Date.now();
+  }
+
+  S.timer=setInterval(clock,250);
+  clock();
 }
 function clock(){
-  if(!S.start)return;let ms=(S.done?S.finished:Date.now())-S.start,sec=Math.floor(ms/1000);
+  if(!S.start)return;
+  let sec=Math.floor(gameplayElapsedMs()/1000);
   document.getElementById('time').textContent=Math.floor(sec/60)+":"+String(sec%60).padStart(2,'0')
 }
 function solved(){
@@ -854,13 +864,13 @@ function solved(){
   return routeOriented && routePowered && goal?.on && crystals.every(c=>c.on);
 }
 function turn(r,c){if(S.done||S.studying)return;startClock();let t=S.tiles[r][c];t.rot=(t.rot+1)%4;S.moves++;render();if(solved())finish()}
-function stars(){return golfScore().label}
+function stars(){return distortionScore().label}
 function text(){
   return `🌌 DISTORTION GRID #${String(S.num).padStart(3,'0')}
 ${S.isDailyChampion?'👑 NEW DAILY CHAMPION':'✅ Stabilized'}
 🔄 ${S.moves} moves (Par ${S.min})
 ⏱️ ${document.getElementById('time').textContent}
-${golfScore().label} — ${golfScore().detail}
+${distortionScore().label} — ${distortionScore().detail}
 
 🟪🟪🟪🟪🟪
 🟪✨✨✨🟪
@@ -873,9 +883,22 @@ ${golfScore().label} — ${golfScore().detail}
 
 function secondsTaken(){
   if(!S.start) return 0;
-  return Math.max(0,Math.floor(((S.done?S.finished:Date.now())-S.start)/1000))
+  return Math.max(0,Math.floor(gameplayElapsedMs()/1000))
 }
 function formatSec(sec){return Math.floor(sec/60)+":"+String(sec%60).padStart(2,'0')}
+
+function currentGuidePauseMs(){
+  return S.guidePaused && S.guidePauseStarted
+    ? Date.now()-S.guidePauseStarted
+    : 0;
+}
+
+function gameplayElapsedMs(endTime=null){
+  if(!S.start) return 0;
+  const end=endTime ?? (S.done?S.finished:Date.now());
+  return Math.max(0,end-S.start-S.guidePausedMs-currentGuidePauseMs());
+}
+
 
 function leaderboardStorageKey(){return 'dg_top5_'+S.key}
 function historyStorageKey(){return 'dg_history'}
@@ -1078,7 +1101,7 @@ async function postCompletedResultToDiscord({
         moves:S.moves,
         par:S.min,
         perfectMin:S.perfectMin,
-        scoreLabel:golfScore().short,
+        scoreLabel:distortionScore().short,
         seconds,
         streak,
         rank,
@@ -1260,7 +1283,7 @@ function finish(){
   document.getElementById('rMoves').textContent=S.moves;
   document.getElementById('rPar').textContent=S.min;
   document.getElementById('rTime').textContent=document.getElementById('time').textContent;
-  document.getElementById('rStars').textContent=golfScore().label;
+  document.getElementById('rStars').textContent=distortionScore().label;
   document.getElementById('newRecord').classList.toggle('hidden',!S.isDailyChampion);
 
   const personal=document.getElementById('personalNote');
@@ -1283,7 +1306,7 @@ function finish(){
     rows.findIndex(r=>r.name===name && r.moves===S.moves && r.seconds===sec)+1
   );
 
-  const score=golfScore();
+  const score=distortionScore();
   saveDailyAttempt({
     status:'complete',
     moves:S.moves,
@@ -1312,7 +1335,7 @@ function reset(test=false){
   const testMode=isAdminTestMode();
   test=!!test && testMode;
 
-  S.moves=0;S.start=null;S.done=false;S.finished=null;S.isTest=test;S.lastPowered=new Set();S.lastPoweredCrystals=new Set();S.isDailyChampion=false;S.gaveUp=false;
+  S.moves=0;S.start=null;S.done=false;S.finished=null;S.isTest=test;S.guidePaused=false;S.guidePauseStarted=null;S.guidePausedMs=0;S.lastPowered=new Set();S.lastPoweredCrystals=new Set();S.isDailyChampion=false;S.gaveUp=false;
 
   if(test){
     S.testIndex=(S.testIndex+1)%DIFFICULTIES.length;
@@ -1521,9 +1544,41 @@ document.getElementById('championCard').onclick=()=>{
 document.getElementById('closeTop5').onclick=()=>document.getElementById('top5Modal').classList.add('hidden');
 document.getElementById('top5Modal').addEventListener('click',e=>{if(e.target.id==='top5Modal')document.getElementById('top5Modal').classList.add('hidden')});
 
-document.getElementById('infoBtn').onclick=()=>document.getElementById('infoModal').classList.remove('hidden');
-document.getElementById('closeInfo').onclick=()=>document.getElementById('infoModal').classList.add('hidden');
-document.getElementById('infoModal').addEventListener('click',e=>{if(e.target.id==='infoModal')document.getElementById('infoModal').classList.add('hidden')});
+function pauseForGuide(){
+  // Study Phase deliberately continues. Only live gameplay time pauses.
+  if(S.studying || S.done || !S.start || S.guidePaused) return;
+
+  S.guidePaused=true;
+  S.guidePauseStarted=Date.now();
+  clock();
+}
+
+function resumeFromGuide(){
+  if(!S.guidePaused) return;
+
+  if(S.guidePauseStarted){
+    S.guidePausedMs+=Date.now()-S.guidePauseStarted;
+  }
+
+  S.guidePaused=false;
+  S.guidePauseStarted=null;
+  clock();
+}
+
+function closeDistortionGuide(){
+  document.getElementById('infoModal').classList.add('hidden');
+  resumeFromGuide();
+}
+
+document.getElementById('infoBtn').onclick=()=>{
+  pauseForGuide();
+  document.getElementById('infoModal').classList.remove('hidden');
+};
+
+document.getElementById('closeInfo').onclick=closeDistortionGuide;
+document.getElementById('infoModal').addEventListener('click',e=>{
+  if(e.target.id==='infoModal') closeDistortionGuide();
+});
 
 document.getElementById('giveUp').onclick=giveUp;
 document.getElementById('dailyLockedClose').onclick=()=>document.getElementById('dailyLockedModal').classList.add('hidden');
