@@ -240,12 +240,32 @@
   </div>
 </div>
 
+
 <div id="tutorialModal" class="tutorial-mask hidden">
-  <div class="tutorial-card">
-    <div class="eyebrow">FIRST DISTORTION</div>
-    <h2 style="margin:.35rem 0 .6rem">Quick Tutorial</h2>
-    <p class="guide-copy">You only see this once. The 15-second Study Phase starts after you close it.</p>
-    <div class="tutorial-step"><div class="tutorial-icon">✦</div><div><b>Start at the Core</b><span>Energy begins here. Find the real route through the grid — not every tile needs to be used.</span></div></div>
+  <div class="tutorial-coach">
+    <div class="tutorial-progress">
+      <span id="tutorialStepLabel">Tutorial</span>
+      <span id="tutorialProgressText">1 / 1</span>
+    </div>
+
+    <div id="tutorialCoachIcon" class="tutorial-coach-icon">✦</div>
+    <h2 id="tutorialCoachTitle">Welcome to Distortion Grid</h2>
+    <p id="tutorialCoachText" class="tutorial-coach-text"></p>
+
+    <div id="tutorialExtra" class="tutorial-extra hidden"></div>
+
+    <div class="tutorial-actions">
+      <button id="tutorialBack" class="secondary">Back</button>
+      <button id="tutorialNext" class="primary">Next</button>
+    </div>
+  </div>
+</div>
+
+<div id="tutorialPracticeHint" class="tutorial-practice-hint hidden">
+  <b>Practice Grid</b>
+  <span>Rotate the path from ✦ Core → ◆ Crystal → ◈ Goal.</span>
+</div>
+
     <div class="tutorial-step"><div class="tutorial-icon">◆</div><div><b>Power every Crystal</b><span>Every crystal is part of the hidden Core-to-Goal route. A crystal pulses when it becomes energized.</span></div></div>
     <div class="tutorial-step"><div class="tutorial-icon">◈</div><div><b>Reach the Stabilizer</b><span>Power the goal after all crystals. Fewest moves wins; fastest time breaks ties.</span></div></div>
     <button id="tutorialStart" class="primary" style="width:100%;margin-top:14px">Start My First Grid</button>
