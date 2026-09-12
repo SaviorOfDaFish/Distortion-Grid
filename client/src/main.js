@@ -1075,12 +1075,10 @@ async function postCompletedResultToDiscord({
 }){
   const status=document.getElementById('autoPostStatus');
 
-  try{
-    if(status) status.textContent='Posting result to Discord…';
-
+  async function sendAttempt(){
     let auth=getDiscordAuth();
 
-    if(!auth){
+    if(!auth?.access_token){
       auth=await initDiscord();
     }
 
@@ -1114,11 +1112,29 @@ async function postCompletedResultToDiscord({
     const data=await response.json().catch(()=>({}));
 
     if(!response.ok){
-      throw new Error(data.error||response.statusText||'Result post failed.');
+      const err=new Error(data.error||response.statusText||'Result post failed.');
+      err.status=response.status;
+      throw err;
+    }
+
+    return data;
+  }
+
+  try{
+    if(status) status.textContent='Posting result to Discord…';
+
+    let data;
+
+    try{
+      data=await sendAttempt();
+    }catch(firstError){
+      console.warn('First Discord result post failed; retrying once.',firstError);
+      if(status) status.textContent='Retrying Discord post…';
+      data=await sendAttempt();
     }
 
     if(status){
-      status.textContent=data.duplicate
+      status.textContent=data?.duplicate
         ? '✓ Result already posted to Discord'
         : '✓ Posted automatically to Discord';
     }
@@ -1127,121 +1143,11 @@ async function postCompletedResultToDiscord({
   }catch(error){
     console.error('Could not post Distortion Grid result to Discord:',error);
     if(status){
-      status.textContent='⚠ Could not post to Discord automatically. Check bot connection/permissions.';
+      status.textContent=`⚠ Discord post failed: ${error?.message||'Unknown error'}`;
     }
     return false;
   }
 }
-
-
-function migrateLegacyPlayerRecords(displayName){
-  if(!displayName || displayName==='Player') return;
-
-  try{
-    const recordKey=recordStorageKey();
-    const record=JSON.parse(localStorage.getItem(recordKey)||'null');
-
-    if(record?.name==='Player'){
-      record.name=displayName;
-      localStorage.setItem(recordKey,JSON.stringify(record));
-    }
-  }catch{}
-
-  try{
-    const leaderboardKey=leaderboardStorageKey();
-    const rows=JSON.parse(localStorage.getItem(leaderboardKey)||'[]');
-    let changed=false;
-
-    rows.forEach(row=>{
-      if(row?.name==='Player'){
-        row.name=displayName;
-        changed=true;
-      }
-    });
-
-    if(changed){
-      localStorage.setItem(leaderboardKey,JSON.stringify(rows));
-    }
-  }catch{}
-
-  updateRecordPanel();
-}
-
-
-function ensureDiscordStatusBadge(){
-  let badge=document.getElementById('discordConnectionStatus');
-
-  if(badge) return badge;
-
-  badge=document.createElement('div');
-  badge.id='discordConnectionStatus';
-  badge.style.cssText=[
-    'position:fixed',
-    'left:10px',
-    'bottom:10px',
-    'z-index:9999',
-    'padding:7px 10px',
-    'border-radius:10px',
-    'font:700 12px/1.2 system-ui,sans-serif',
-    'background:#0d0a18e8',
-    'border:1px solid #6b4d9b',
-    'color:#d8cbff',
-    'box-shadow:0 0 16px #0008',
-    'max-width:min(420px,calc(100vw - 20px))',
-    'white-space:normal'
-  ].join(';');
-
-  badge.textContent='Discord: Connecting…';
-  document.body.appendChild(badge);
-  return badge;
-}
-
-function updateDiscordStatusBadge(detail){
-  const badge=ensureDiscordStatusBadge();
-  const stage=detail?.stage||getDiscordAuthStatus()?.stage||'idle';
-  const error=detail?.error||getDiscordAuthStatus()?.error;
-  const user=detail?.user||getDiscordAuth()?.user;
-
-  const labels={
-    idle:'Starting…',
-    'sdk-starting':'Opening Discord SDK…',
-    'sdk-ready':'Discord SDK ready',
-    authorizing:'Requesting Discord authorization…',
-    'authorization-consent':'Waiting for Discord approval…',
-    authorized:'Discord authorization received',
-    'token-exchange':'Exchanging Discord token…',
-    authenticating:'Authenticating Discord user…',
-    connected:'Connected',
-    error:'Login Error'
-  };
-
-  if(stage==='connected' && user){
-    const name=user.global_name||user.username||user.id;
-    badge.textContent=`Discord: Connected as ${name}`;
-    badge.style.borderColor='#35d07f';
-    badge.style.color='#aef5ce';
-    return;
-  }
-
-  if(stage==='error'){
-    badge.textContent=`Discord Login Error: ${error||'Unknown authentication error'}`;
-    badge.style.borderColor='#e85a7b';
-    badge.style.color='#ffd0da';
-    return;
-  }
-
-  badge.textContent=`Discord: ${labels[stage]||stage}`;
-  badge.style.borderColor='#6b4d9b';
-  badge.style.color='#d8cbff';
-}
-
-window.addEventListener('dg-discord-auth-status',event=>{
-  updateDiscordStatusBadge(event.detail);
-});
-
-ensureDiscordStatusBadge();
-updateDiscordStatusBadge();
-
 
 function finish(){
   S.done=true;S.finished=Date.now();clearInterval(S.timer);clock();
