@@ -2,7 +2,7 @@ import './styles.css';
 import { initDiscord, getDiscordAuth, getDiscordAuthStatus } from './discord.js';
 
 const D={N:[-1,0],E:[0,1],S:[1,0],W:[0,-1]}, O={N:'S',E:'W',S:'N',W:'E'}, ORD=['N','E','S','W'];
-let S={n:5,tiles:[],moves:0,start:null,done:false,finished:null,timer:null,num:1,min:1,key:'',isTest:false,difficulty:'Unstable',testIndex:0,crystalCount:1,branchAttempts:5,studyTimer:null,studyRemaining:15,studying:false,soundOn:true,lastPowered:new Set(),lastPoweredCrystals:new Set(),audioCtx:null,isDailyChampion:false,leaderboardSize:5,forcedDifficulty:'Auto',studySeconds:15,gaveUp:false,activeLockerCategory:'trail'};
+let S={n:5,tiles:[],moves:0,start:null,done:false,finished:null,timer:null,num:1,min:1,perfectMin:1,key:'',isTest:false,difficulty:'Unstable',testIndex:0,crystalCount:1,branchAttempts:5,studyTimer:null,studyRemaining:15,studying:false,soundOn:true,lastPowered:new Set(),lastPoweredCrystals:new Set(),audioCtx:null,isDailyChampion:false,leaderboardSize:5,forcedDifficulty:'Auto',studySeconds:15,gaveUp:false,activeLockerCategory:'trail'};
 
 function hash(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
 function rng(seed){return function(){let t=seed+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
@@ -59,11 +59,147 @@ function populateAdminPanel(){
   document.getElementById('adminCurrentDifficulty').textContent=S.difficulty;
   document.getElementById('adminCurrentPar').textContent=S.min;
   document.getElementById('adminCurrentGrid').textContent=`${S.n}×${S.n}`;
+  updateTestModeUI();
 }
 function adminMessage(msg){
   const el=document.getElementById('adminStatus');
   el.textContent=msg;
   setTimeout(()=>{if(el.textContent===msg)el.textContent=''},2600);
+}
+
+
+function isAdminTestMode(){
+  return localStorage.getItem('dg_admin_test_mode')==='1';
+}
+
+function parAllowance(){
+  return {
+    Stable:2,
+    Unstable:3,
+    Fractured:4,
+    Cataclysm:5
+  }[S.difficulty] || 3;
+}
+
+function golfScore(moves=S.moves){
+  if(moves===S.perfectMin){
+    return {
+      key:'ace',
+      label:'🎯 HOLE-IN-ONE!',
+      short:'HOLE-IN-ONE',
+      detail:'Perfect Route'
+    };
+  }
+
+  const delta=moves-S.min;
+
+  if(delta<=-3) return {key:'albatross',label:'🪽 ALBATROSS',short:'Albatross',detail:`${Math.abs(delta)} under Par`};
+  if(delta===-2) return {key:'eagle',label:'🦅 EAGLE',short:'Eagle',detail:'2 under Par'};
+  if(delta===-1) return {key:'birdie',label:'🐦 BIRDIE',short:'Birdie',detail:'1 under Par'};
+  if(delta===0) return {key:'par',label:'⛳ PAR',short:'Par',detail:'Exactly Par'};
+  if(delta===1) return {key:'bogey',label:'Bogey',short:'Bogey',detail:'1 over Par'};
+  if(delta===2) return {key:'double-bogey',label:'Double Bogey',short:'Double Bogey',detail:'2 over Par'};
+  if(delta===3) return {key:'triple-bogey',label:'Triple Bogey',short:'Triple Bogey',detail:'3 over Par'};
+  return {key:'over-par',label:`+${delta} OVER PAR`,short:`+${delta}`,detail:`${delta} over Par`};
+}
+
+function officialPlayerId(){
+  return getDiscordAuth()?.user?.id || 'browser';
+}
+
+function dailyAttemptStorageKey(playerId=officialPlayerId()){
+  return `dg_daily_attempt_${today()}_${playerId}`;
+}
+
+function getDailyAttempt(){
+  try{
+    return JSON.parse(localStorage.getItem(dailyAttemptStorageKey())||'null');
+  }catch{
+    return null;
+  }
+}
+
+function saveDailyAttempt(attempt){
+  if(S.isTest || isAdminTestMode()) return;
+  localStorage.setItem(
+    dailyAttemptStorageKey(),
+    JSON.stringify({
+      date:today(),
+      playerId:officialPlayerId(),
+      ...attempt
+    })
+  );
+}
+
+function migrateBrowserDailyAttempt(){
+  const userId=getDiscordAuth()?.user?.id;
+  if(!userId) return;
+
+  const browserKey=`dg_daily_attempt_${today()}_browser`;
+  const userKey=`dg_daily_attempt_${today()}_${userId}`;
+
+  if(!localStorage.getItem(userKey) && localStorage.getItem(browserKey)){
+    localStorage.setItem(userKey,localStorage.getItem(browserKey));
+  }
+
+  localStorage.removeItem(browserKey);
+}
+
+function showDailyLock(attempt){
+  if(!attempt || isAdminTestMode()) return false;
+
+  clearInterval(S.timer);
+  clearInterval(S.studyTimer);
+  S.done=true;
+  S.studying=false;
+
+  const title=document.getElementById('dailyLockedTitle');
+  const copy=document.getElementById('dailyLockedCopy');
+  const stats=document.getElementById('dailyLockedStats');
+
+  if(attempt.status==='incomplete'){
+    title.textContent='Daily Attempt Incomplete';
+    copy.textContent='You gave up on today’s official Distortion Grid. Come back tomorrow for a new grid.';
+  }else{
+    title.textContent='Daily Attempt Complete';
+    copy.textContent='Your official Distortion Grid result for today has already been recorded.';
+  }
+
+  if(stats){
+    const pieces=[];
+    if(Number.isFinite(attempt.moves)) pieces.push(`${attempt.moves} moves`);
+    if(Number.isFinite(attempt.par)) pieces.push(`Par ${attempt.par}`);
+    if(Number.isFinite(attempt.seconds)) pieces.push(formatSec(attempt.seconds));
+    if(attempt.scoreLabel) pieces.push(attempt.scoreLabel);
+    stats.textContent=pieces.join(' • ') || 'Today’s attempt is locked.';
+  }
+
+  document.getElementById('dailyLockedModal')?.classList.remove('hidden');
+  document.getElementById('giveUp')?.setAttribute('disabled','disabled');
+  return true;
+}
+
+function enforceDailyAttemptLock(){
+  if(S.isTest || isAdminTestMode()) return false;
+  migrateBrowserDailyAttempt();
+  const attempt=getDailyAttempt();
+  return attempt ? showDailyLock(attempt) : false;
+}
+
+function updateTestModeUI(){
+  const enabled=isAdminTestMode();
+  const btn=document.getElementById('new');
+  const adminBtn=document.getElementById('adminToggleTestMode');
+
+  if(btn){
+    btn.style.display=enabled?'':'none';
+    btn.disabled=!enabled;
+  }
+
+  if(adminBtn){
+    adminBtn.textContent=enabled?'Disable Test Mode':'Enable Test Mode';
+    adminBtn.classList.toggle('admin-danger',enabled);
+  }
 }
 
 
@@ -158,7 +294,7 @@ function updateCosmeticProgressAfterClear(){
   stats.totalClears+=1;
   const key=S.difficulty.toLowerCase()+'Clears';
   if(key in stats) stats[key]+=1;
-  if(S.moves===S.min) stats.perfectSolves+=1;
+  if(S.moves===S.perfectMin) stats.perfectSolves+=1;
   if(S.isDailyChampion) stats.championWins+=1;
   const streak=Number(localStorage.getItem('dg_streak')||0)+1;
   stats.bestStreak=Math.max(stats.bestStreak,streak);
@@ -502,7 +638,8 @@ function gen(seed){
   }
 
   S.tiles=T;
-  S.min=Math.max(1,T.flat().filter(t=>t.required).reduce((sum,t)=>sum+clockwiseDistanceToSolved(t),0));
+  S.perfectMin=Math.max(1,T.flat().filter(t=>t.required).reduce((sum,t)=>sum+clockwiseDistanceToSolved(t),0));
+  S.min=S.perfectMin+parAllowance();
 }
 function tileEl(t){
   let b=document.createElement('button');b.className='tile '+t.kind;b.dataset.r=t.r;b.dataset.c=t.c;
@@ -717,13 +854,13 @@ function solved(){
   return routeOriented && routePowered && goal?.on && crystals.every(c=>c.on);
 }
 function turn(r,c){if(S.done||S.studying)return;startClock();let t=S.tiles[r][c];t.rot=(t.rot+1)%4;S.moves++;render();if(solved())finish()}
-function stars(){let x=S.moves/S.min;return x<=1.15?'⭐⭐⭐':x<=1.6?'⭐⭐':'⭐'}
+function stars(){return golfScore().label}
 function text(){
   return `🌌 DISTORTION GRID #${String(S.num).padStart(3,'0')}
 ${S.isDailyChampion?'👑 NEW DAILY CHAMPION':'✅ Stabilized'}
 🔄 ${S.moves} moves (Par ${S.min})
 ⏱️ ${document.getElementById('time').textContent}
-${stars()}
+${golfScore().label} — ${golfScore().detail}
 
 🟪🟪🟪🟪🟪
 🟪✨✨✨🟪
@@ -814,6 +951,8 @@ function updateTestButton(){
   if(!btn) return;
   const next=DIFFICULTIES[(S.testIndex+1)%DIFFICULTIES.length];
   btn.textContent='Test: '+next;
+  btn.style.display=isAdminTestMode()?'':'none';
+  btn.disabled=!isAdminTestMode();
 }
 
 function updateRecordPanel(){
@@ -868,15 +1007,19 @@ function giveUp(){
   // Preserve the time/moves they had when they surrendered.
   const elapsed=secondsTaken();
   if(!S.isTest){
-    localStorage.setItem(incompleteStorageKey(),JSON.stringify({
+    const incompleteAttempt={
       status:'incomplete',
       moves:S.moves,
       seconds:elapsed,
       par:S.min,
+      perfectMin:S.perfectMin,
       difficulty:S.difficulty,
       gridNumber:S.num,
       gaveUpAt:Date.now()
-    }));
+    };
+
+    localStorage.setItem(incompleteStorageKey(),JSON.stringify(incompleteAttempt));
+    saveDailyAttempt(incompleteAttempt);
   }
 
   revealParPath();
@@ -934,11 +1077,13 @@ async function postCompletedResultToDiscord({
         difficulty:S.difficulty,
         moves:S.moves,
         par:S.min,
+        perfectMin:S.perfectMin,
+        scoreLabel:golfScore().short,
         seconds,
         streak,
         rank,
         isChampion:S.isDailyChampion,
-        isPerfect:S.moves===S.min,
+        isPerfect:S.moves===S.perfectMin,
         isTest:S.isTest
       })
     });
@@ -1115,7 +1260,7 @@ function finish(){
   document.getElementById('rMoves').textContent=S.moves;
   document.getElementById('rPar').textContent=S.min;
   document.getElementById('rTime').textContent=document.getElementById('time').textContent;
-  document.getElementById('rStars').textContent=stars();
+  document.getElementById('rStars').textContent=golfScore().label;
   document.getElementById('newRecord').classList.toggle('hidden',!S.isDailyChampion);
 
   const personal=document.getElementById('personalNote');
@@ -1138,6 +1283,20 @@ function finish(){
     rows.findIndex(r=>r.name===name && r.moves===S.moves && r.seconds===sec)+1
   );
 
+  const score=golfScore();
+  saveDailyAttempt({
+    status:'complete',
+    moves:S.moves,
+    seconds:sec,
+    par:S.min,
+    perfectMin:S.perfectMin,
+    scoreLabel:score.short,
+    difficulty:S.difficulty,
+    gridNumber:S.num,
+    rank:myRank,
+    completedAt:Date.now()
+  });
+
   // Post the completed result into the configured Discord results channel.
   // This intentionally happens after local rank/champion status is calculated.
   postCompletedResultToDiscord({
@@ -1149,6 +1308,10 @@ function finish(){
 function reset(test=false){
   clearInterval(S.timer);
   clearInterval(S.studyTimer);
+
+  const testMode=isAdminTestMode();
+  test=!!test && testMode;
+
   S.moves=0;S.start=null;S.done=false;S.finished=null;S.isTest=test;S.lastPowered=new Set();S.lastPoweredCrystals=new Set();S.isDailyChampion=false;S.gaveUp=false;
 
   if(test){
@@ -1177,10 +1340,17 @@ function reset(test=false){
   document.getElementById('board')?.classList.remove('par-revealed');
   const nr=document.getElementById('newRecord'); if(nr) nr.classList.add('hidden'); const pn=document.getElementById('personalNote'); if(pn) pn.classList.add('hidden');
   const st=document.getElementById('status'); if(st) st.textContent='';
+  document.getElementById('giveUp')?.removeAttribute('disabled');
   updateRecordPanel();
   updateTestButton();
+  updateTestModeUI();
   render();
   applyCosmetics();
+
+  if(!test && enforceDailyAttemptLock()){
+    return;
+  }
+
   const seenTutorial=localStorage.getItem('dg_tutorial_seen_v1')==='1';
   if(!seenTutorial && !test){
     clearInterval(S.studyTimer);
@@ -1268,6 +1438,28 @@ document.getElementById('adminUnlockCosmetics').onclick=()=>{
   adminMessage('All cosmetics unlocked for testing on this browser.');
 };
 
+document.getElementById('adminToggleTestMode').onclick=()=>{
+  const enabling=!isAdminTestMode();
+
+  if(enabling){
+    localStorage.setItem('dg_admin_test_mode','1');
+    adminMessage('Test Mode enabled: unlimited test attempts are available.');
+    updateTestModeUI();
+    setTimeout(()=>{
+      document.getElementById('adminPanelModal').classList.add('hidden');
+      reset(true);
+    },350);
+  }else{
+    localStorage.removeItem('dg_admin_test_mode');
+    adminMessage('Test Mode disabled: official daily rules are active.');
+    updateTestModeUI();
+    setTimeout(()=>{
+      document.getElementById('adminPanelModal').classList.add('hidden');
+      reset(false);
+    },350);
+  }
+};
+
 document.getElementById('adminResetEverything').onclick=()=>{
   const confirmed=window.confirm(
     'Reset EVERYTHING for Distortion Grid on this browser?\n\n' +
@@ -1334,12 +1526,17 @@ document.getElementById('closeInfo').onclick=()=>document.getElementById('infoMo
 document.getElementById('infoModal').addEventListener('click',e=>{if(e.target.id==='infoModal')document.getElementById('infoModal').classList.add('hidden')});
 
 document.getElementById('giveUp').onclick=giveUp;
+document.getElementById('dailyLockedClose').onclick=()=>document.getElementById('dailyLockedModal').classList.add('hidden');
 document.getElementById('closeGiveUp').onclick=()=>document.getElementById('giveUpResult').classList.add('hidden');
 reset(false);
 updateTestButton();
-document.getElementById('new').onclick=()=>reset(true);
+document.getElementById('new').onclick=()=>{
+  if(!isAdminTestMode()) return;
+  reset(true);
+};
 document.getElementById('close').onclick=()=>document.getElementById('result').classList.add('hidden');
 window.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='s'){
+  if(!isAdminTestMode()) return;
   clearInterval(S.studyTimer);
   S.studying=false;
   document.getElementById('studyOverlay')?.classList.add('hidden');
@@ -1370,6 +1567,9 @@ initDiscord().then(auth=>{
   if(displayName){
     migrateLegacyPlayerRecords(displayName);
   }
+
+  migrateBrowserDailyAttempt();
+  enforceDailyAttemptLock();
 }).catch(err=>{
   console.error('Discord SDK authentication failed:',err);
   updateDiscordStatusBadge({stage:'error',error:err?.message||String(err)});
