@@ -2,7 +2,7 @@ import './styles.css';
 import { initDiscord, getDiscordAuth, getDiscordAuthStatus } from './discord.js';
 
 const D={N:[-1,0],E:[0,1],S:[1,0],W:[0,-1]}, O={N:'S',E:'W',S:'N',W:'E'}, ORD=['N','E','S','W'];
-let S={n:5,tiles:[],moves:0,start:null,done:false,finished:null,timer:null,num:1,min:1,perfectMin:1,key:'',isTest:false,difficulty:'Unstable',testIndex:0,crystalCount:1,branchAttempts:5,studyTimer:null,studyRemaining:15,studying:false,soundOn:true,lastPowered:new Set(),lastPoweredCrystals:new Set(),audioCtx:null,isDailyChampion:false,leaderboardSize:5,forcedDifficulty:'Auto',studySeconds:15,gaveUp:false,activeLockerCategory:'trail',guidePaused:false,guidePauseStarted:null,guidePausedMs:0,tutorialMode:false,tutorialStep:0,tutorialPracticeLive:false,tutorialPracticeSolved:false,officialPreparing:false,serverAttempt:null,stateSaveTimer:null,tutorialStatusResolved:false,tutorialServerComplete:false};
+let S={n:5,tiles:[],moves:0,start:null,done:false,finished:null,timer:null,num:1,min:1,perfectMin:1,key:'',isTest:false,difficulty:'Unstable',testIndex:0,crystalCount:1,branchAttempts:5,studyTimer:null,studyRemaining:15,studying:false,soundOn:true,lastPowered:new Set(),lastPoweredCrystals:new Set(),audioCtx:null,isDailyChampion:false,leaderboardSize:5,forcedDifficulty:'Auto',studySeconds:15,gaveUp:false,activeLockerCategory:'trail',guidePaused:false,guidePauseStarted:null,guidePausedMs:0,tutorialMode:false,tutorialStep:0,tutorialPracticeLive:false,tutorialPracticeSolved:false,officialPreparing:false,serverAttempt:null,stateSaveTimer:null};
 
 function hash(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
 function rng(seed){return function(){let t=seed+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
@@ -1306,253 +1306,16 @@ function finishTutorialPractice(){
   },650);
 }
 
-
-
-async function fetchPlayerBootstrap(timeoutMs=7000){
-  const auth=getDiscordAuth();
-
-  if(!auth?.access_token){
-    throw new Error('Discord authentication is not ready.');
-  }
-
-  const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),timeoutMs);
-
-  try{
-    const response=await fetch('/api/player/bootstrap',{
-      headers:{
-        'Authorization':`Bearer ${auth.access_token}`
-      },
-      signal:controller.signal
-    });
-
-    const data=await response.json().catch(()=>({}));
-
-    if(!response.ok){
-      throw new Error(data.error||response.statusText||'Could not load player profile.');
-    }
-
-    return data;
-  }catch(error){
-    if(error?.name==='AbortError'){
-      throw new Error('Profile check timed out.');
-    }
-    throw error;
-  }finally{
-    clearTimeout(timer);
-  }
-}
-
-function clearProfileCheckingBoard(){
-  const board=document.getElementById('board');
-
-  if(
-    board &&
-    board.children.length===1 &&
-    board.textContent.includes('Checking your Distortion Grid profile')
-  ){
-    board.innerHTML='';
-  }
-}
-
-function showProfileRetry(error){
-  clearInterval(S.timer);
-  clearInterval(S.studyTimer);
-  S.studying=true;
-
-  const phase=document.getElementById('phaseBanner');
-  if(phase){
-    phase.textContent='Connection Error';
-    phase.classList.remove('live');
-  }
-
-  const board=document.getElementById('board');
-  if(board){
-    board.classList.add('studying');
-    board.innerHTML=`
-      <div style="grid-column:1/-1;display:grid;place-items:center;min-height:230px;padding:22px;text-align:center">
-        <div>
-          <b style="display:block;color:#ffd0da;margin-bottom:8px">Could not load your player profile.</b>
-          <span style="display:block;color:#c6b8d6;font-size:.82rem;margin-bottom:14px">${String(error?.message||error||'Connection error')}</span>
-          <button id="retryProfileBootstrap" class="primary" style="min-width:150px">Retry</button>
-        </div>
-      </div>
-    `;
-
-    document.getElementById('retryProfileBootstrap')?.addEventListener('click',()=>{
-      showTutorialProfileCheck();
-      runPlayerBootstrap();
-    },{once:true});
-  }
-}
-
-async function runPlayerBootstrap(){
-  if(isAdminTestMode()) return;
-
-  showTutorialProfileCheck();
-
-  try{
-    const data=await fetchPlayerBootstrap();
-
-    clearProfileCheckingBoard();
-
-    S.tutorialStatusResolved=true;
-    S.tutorialServerComplete=Boolean(data.tutorialComplete);
-
-    if(data.tutorialComplete){
-      localStorage.setItem(TUTORIAL_COMPLETE_KEY,'1');
-      localStorage.setItem('dg_tutorial_seen_v1','1');
-    }else{
-      localStorage.removeItem(TUTORIAL_COMPLETE_KEY);
-    }
-
-    const attempt=data.attempt||null;
-
-    if(attempt){
-      S.serverAttempt=attempt;
-
-      localStorage.setItem(TUTORIAL_COMPLETE_KEY,'1');
-      localStorage.setItem('dg_tutorial_seen_v1','1');
-      S.tutorialServerComplete=true;
-
-      localStorage.setItem(dailyAttemptFallbackKey(),JSON.stringify(attempt));
-      localStorage.setItem(dailyAttemptStorageKey(),JSON.stringify(attempt));
-
-      if(attempt.status==='active'){
-        reset(false);
-        return;
-      }
-
-      showDailyLock(attempt);
-      return;
-    }
-
-    if(!data.tutorialComplete){
-      startInteractiveTutorial();
-      return;
-    }
-
-    reset(false);
-  }catch(error){
-    console.error('Player bootstrap failed:',error);
-
-    // Known local completion may be used as a fallback, but never invent a
-    // completed tutorial for a brand-new player.
-    if(localStorage.getItem(TUTORIAL_COMPLETE_KEY)==='1'){
-      S.tutorialStatusResolved=true;
-      S.tutorialServerComplete=true;
-      clearProfileCheckingBoard();
-      reset(false);
-      return;
-    }
-
-    showProfileRetry(error);
-  }
-}
-
-async function fetchServerTutorialStatus(){
-  try{
-    const response=await authenticatedFetch('/api/player/tutorial');
-    const data=await response.json().catch(()=>({}));
-
-    if(!response.ok){
-      throw new Error(data.error||response.statusText||'Could not check tutorial status.');
-    }
-
-    S.tutorialStatusResolved=true;
-    S.tutorialServerComplete=Boolean(data.tutorialComplete);
-
-    if(S.tutorialServerComplete){
-      localStorage.setItem(TUTORIAL_COMPLETE_KEY,'1');
-      localStorage.setItem('dg_tutorial_seen_v1','1');
-    }else{
-      localStorage.removeItem(TUTORIAL_COMPLETE_KEY);
-    }
-
-    return S.tutorialServerComplete;
-  }catch(error){
-    console.error('Server tutorial-status check failed:',error);
-    S.tutorialStatusResolved=false;
-    throw error;
-  }
-}
-
-async function saveServerTutorialComplete(){
-  const response=await authenticatedFetch('/api/player/tutorial/complete',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:'{}'
-  });
-
-  const data=await response.json().catch(()=>({}));
-
-  if(!response.ok){
-    throw new Error(data.error||response.statusText||'Could not save tutorial completion.');
-  }
-
-  S.tutorialStatusResolved=true;
-  S.tutorialServerComplete=true;
-  localStorage.setItem(TUTORIAL_COMPLETE_KEY,'1');
-  localStorage.setItem('dg_tutorial_seen_v1','1');
-
-  return true;
-}
-
-function showTutorialProfileCheck(){
-  clearInterval(S.timer);
-  clearInterval(S.studyTimer);
-
-  S.studying=true;
-  S.done=false;
-
-  document.getElementById('tutorialModal')?.classList.add('hidden');
-  document.getElementById('tutorialPracticeHint')?.classList.add('hidden');
-  document.getElementById('studyOverlay')?.classList.add('hidden');
-  document.getElementById('board')?.classList.add('studying');
-
-  const board=document.getElementById('board');
-  if(board && !board.children.length){
-    board.innerHTML='<div style="grid-column:1/-1;display:grid;place-items:center;min-height:220px;color:#cbb9e8;font-weight:800;text-align:center;padding:20px">Checking your Distortion Grid profile…</div>';
-  }
-
-  const phase=document.getElementById('phaseBanner');
-  if(phase){
-    phase.textContent='Checking Profile…';
-    phase.classList.remove('live');
-  }
-}
-
 function startInteractiveTutorial(){
   buildTutorialPracticeGrid();
   S.tutorialStep=0;
   renderTutorialStep();
 }
 
-async function completeInteractiveTutorial(){
-  const readyButton=document.getElementById('tutorialNext');
-
-  if(readyButton){
-    readyButton.disabled=true;
-    readyButton.textContent='SAVING…';
-  }
-
-  try{
-    await saveServerTutorialComplete();
-  }catch(error){
-    console.error('Could not save tutorial completion:',error);
-
-    if(readyButton){
-      readyButton.disabled=false;
-      readyButton.textContent='RETRY READY';
-    }
-
-    const text=document.getElementById('tutorialCoachText');
-    if(text){
-      text.textContent='I could not save your tutorial completion to Discord yet. Tap RETRY READY so your progress is remembered on every device.';
-    }
-
-    return;
-  }
+function completeInteractiveTutorial(){
+  localStorage.setItem(TUTORIAL_COMPLETE_KEY,'1');
+  // Keep the legacy key set so older code/builds also consider onboarding complete.
+  localStorage.setItem('dg_tutorial_seen_v1','1');
 
   clearInterval(S.timer);
   clearInterval(S.studyTimer);
@@ -2434,33 +2197,13 @@ function reset(test=false){
 
   S.moves=0;S.start=null;S.done=false;S.finished=null;S.isTest=test;S.guidePaused=false;S.guidePauseStarted=null;S.guidePausedMs=0;S.lastPowered=new Set();S.lastPoweredCrystals=new Set();S.isDailyChampion=false;S.gaveUp=false;S.serverAttempt=null;
 
-  const localTutorialComplete=localStorage.getItem(TUTORIAL_COMPLETE_KEY)==='1';
+  const guidedTutorialComplete=localStorage.getItem(TUTORIAL_COMPLETE_KEY)==='1';
 
-  // For a normal launch, PostgreSQL is the cross-device authority for onboarding.
-  // Do not start the tutorial until Discord auth has resolved the player's profile.
-  if(!test && !S.tutorialStatusResolved){
-    if(localTutorialComplete){
-      S.tutorialServerComplete=true;
-    }else{
-      showTutorialProfileCheck();
-
-      // If Discord authentication is already available, ensure the single
-      // bootstrap request is running instead of leaving the UI waiting.
-      if(getDiscordAuth()?.access_token){
-        runPlayerBootstrap();
-      }
-
-      return;
-    }
-  }
-
-  const guidedTutorialComplete=
-    S.tutorialServerComplete ||
-    localStorage.getItem(TUTORIAL_COMPLETE_KEY)==='1';
-
+  // On a true first launch, onboarding happens before the official daily puzzle.
   if(!test && !guidedTutorialComplete){
     const existingAttempt=getDailyAttempt();
 
+    // If this device already knows the player used today's attempt, preserve the lock.
     if(existingAttempt){
       showDailyLock(existingAttempt);
       return;
@@ -2617,34 +2360,10 @@ document.getElementById('adminResetLeaderboard').onclick=()=>{
   adminMessage('Today’s leaderboard has been reset.');
 };
 
-document.getElementById('adminResetTutorial').onclick=async()=>{
-  const btn=document.getElementById('adminResetTutorial');
-  btn.disabled=true;
-  adminMessage('Resetting guided tutorial…');
-
-  try{
-    const response=await authenticatedFetch('/api/admin/tutorial',{
-      method:'DELETE'
-    });
-
-    const data=await response.json().catch(()=>({}));
-
-    if(!response.ok){
-      throw new Error(data.error||response.statusText||'Could not reset tutorial.');
-    }
-
-    localStorage.removeItem('dg_tutorial_seen_v1');
-    localStorage.removeItem(TUTORIAL_COMPLETE_KEY);
-    S.tutorialStatusResolved=true;
-    S.tutorialServerComplete=false;
-
-    adminMessage('Guided tutorial reset for your Discord account. It will run on the next normal load.');
-  }catch(error){
-    console.error('Tutorial reset failed:',error);
-    adminMessage(`Could not reset tutorial: ${error?.message||error}`);
-  }finally{
-    btn.disabled=false;
-  }
+document.getElementById('adminResetTutorial').onclick=()=>{
+  localStorage.removeItem('dg_tutorial_seen_v1');
+  localStorage.removeItem(TUTORIAL_COMPLETE_KEY);
+  adminMessage('Guided first-play tutorial reset. It will run on the next normal load.');
 };
 
 document.getElementById('adminResetStreak').onclick=()=>{
@@ -3004,7 +2723,14 @@ initDiscord().then(async auth=>{
   migrateBrowserDailyAttempt();
 
   if(!isAdminTestMode()){
-    await runPlayerBootstrap();
+    // Local lock is an instant fallback, PostgreSQL is the cross-device authority.
+    const localAttempt=getDailyAttempt();
+
+    if(localAttempt){
+      showDailyLock(localAttempt);
+    }
+
+    await syncServerDailyAttempt();
   }
 }).catch(err=>{
   console.error('Discord SDK authentication failed:',err);
