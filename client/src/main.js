@@ -1,5 +1,5 @@
 import './styles.css';
-import { initDiscord, getDiscordAuth } from './discord.js';
+import { initDiscord, getDiscordAuth, getDiscordAuthStatus } from './discord.js';
 
 const D={N:[-1,0],E:[0,1],S:[1,0],W:[0,-1]}, O={N:'S',E:'W',S:'N',W:'E'}, ORD=['N','E','S','W'];
 let S={n:5,tiles:[],moves:0,start:null,done:false,finished:null,timer:null,num:1,min:1,key:'',isTest:false,difficulty:'Unstable',testIndex:0,crystalCount:1,branchAttempts:5,studyTimer:null,studyRemaining:15,studying:false,soundOn:true,lastPowered:new Set(),lastPoweredCrystals:new Set(),audioCtx:null,isDailyChampion:false,leaderboardSize:5,forcedDifficulty:'Auto',studySeconds:15,gaveUp:false,activeLockerCategory:'trail'};
@@ -999,6 +999,82 @@ function migrateLegacyPlayerRecords(displayName){
   updateRecordPanel();
 }
 
+
+function ensureDiscordStatusBadge(){
+  let badge=document.getElementById('discordConnectionStatus');
+
+  if(badge) return badge;
+
+  badge=document.createElement('div');
+  badge.id='discordConnectionStatus';
+  badge.style.cssText=[
+    'position:fixed',
+    'left:10px',
+    'bottom:10px',
+    'z-index:9999',
+    'padding:7px 10px',
+    'border-radius:10px',
+    'font:700 12px/1.2 system-ui,sans-serif',
+    'background:#0d0a18e8',
+    'border:1px solid #6b4d9b',
+    'color:#d8cbff',
+    'box-shadow:0 0 16px #0008',
+    'max-width:min(420px,calc(100vw - 20px))',
+    'white-space:normal'
+  ].join(';');
+
+  badge.textContent='Discord: Connecting…';
+  document.body.appendChild(badge);
+  return badge;
+}
+
+function updateDiscordStatusBadge(detail){
+  const badge=ensureDiscordStatusBadge();
+  const stage=detail?.stage||getDiscordAuthStatus()?.stage||'idle';
+  const error=detail?.error||getDiscordAuthStatus()?.error;
+  const user=detail?.user||getDiscordAuth()?.user;
+
+  const labels={
+    idle:'Starting…',
+    'sdk-starting':'Opening Discord SDK…',
+    'sdk-ready':'Discord SDK ready',
+    authorizing:'Requesting Discord authorization…',
+    'authorization-consent':'Waiting for Discord approval…',
+    authorized:'Discord authorization received',
+    'token-exchange':'Exchanging Discord token…',
+    authenticating:'Authenticating Discord user…',
+    connected:'Connected',
+    error:'Login Error'
+  };
+
+  if(stage==='connected' && user){
+    const name=user.global_name||user.username||user.id;
+    badge.textContent=`Discord: Connected as ${name}`;
+    badge.style.borderColor='#35d07f';
+    badge.style.color='#aef5ce';
+    return;
+  }
+
+  if(stage==='error'){
+    badge.textContent=`Discord Login Error: ${error||'Unknown authentication error'}`;
+    badge.style.borderColor='#e85a7b';
+    badge.style.color='#ffd0da';
+    return;
+  }
+
+  badge.textContent=`Discord: ${labels[stage]||stage}`;
+  badge.style.borderColor='#6b4d9b';
+  badge.style.color='#d8cbff';
+}
+
+window.addEventListener('dg-discord-auth-status',event=>{
+  updateDiscordStatusBadge(event.detail);
+});
+
+ensureDiscordStatusBadge();
+updateDiscordStatusBadge();
+
+
 function finish(){
   S.done=true;S.finished=Date.now();clearInterval(S.timer);clock();
   if(S.soundOn) overloadSound();
@@ -1280,6 +1356,7 @@ reset(false);
 
 // Initialize Discord Activity context when running inside Discord.
 initDiscord().then(auth=>{
+  updateDiscordStatusBadge({stage:'connected',user:auth?.user});
   const user=auth?.user;
   const displayName=user?.global_name||user?.username;
   const input=document.getElementById('playerName');
@@ -1295,4 +1372,5 @@ initDiscord().then(auth=>{
   }
 }).catch(err=>{
   console.error('Discord SDK authentication failed:',err);
+  updateDiscordStatusBadge({stage:'error',error:err?.message||String(err)});
 });
