@@ -9,6 +9,7 @@ import {
   isDiscordBotReady,
   postTestDistortionResult,
   postDistortionResult,
+  clearDistortionResultsChannel,
 } from "./discordBot.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -277,8 +278,6 @@ app.post("/api/activity-result", async (req, res) => {
       : "Unknown",
     moves: Math.max(0, Math.floor(Number(body.moves) || 0)),
     par: Math.max(0, Math.floor(Number(body.par) || 0)),
-    perfectMin: Math.max(0, Math.floor(Number(body.perfectMin) || 0)),
-    scoreLabel: String(body.scoreLabel || "").slice(0, 40),
     seconds: Math.max(0, Math.floor(Number(body.seconds) || 0)),
     streak: Math.max(0, Math.floor(Number(body.streak) || 0)),
     rank: body.rank == null ? null : Math.max(1, Math.floor(Number(body.rank) || 1)),
@@ -338,6 +337,76 @@ app.post("/api/activity-result", async (req, res) => {
     });
   }
 });
+
+async function getDiscordUserFromBearer(req) {
+  const authHeader = String(req.get("authorization") || "");
+  const accessToken = authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7).trim()
+    : "";
+
+  if (!accessToken) {
+    const error = new Error("Discord authentication is required.");
+    error.status = 401;
+    throw error;
+  }
+
+  const response = await fetch("https://discord.com/api/v10/users/@me", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  const user = await response.json();
+
+  if (!response.ok || !user?.id) {
+    const error = new Error("Discord authentication could not be verified.");
+    error.status = 401;
+    throw error;
+  }
+
+  return user;
+}
+
+app.post("/api/admin/clear-discord-channel", async (req, res) => {
+  try {
+    const user = await getDiscordUserFromBearer(req);
+    const adminId = String(process.env.ADMIN_DISCORD_USER_ID || "").trim();
+
+    if (!adminId) {
+      return res.status(503).json({
+        ok: false,
+        error: "ADMIN_DISCORD_USER_ID is not configured.",
+      });
+    }
+
+    if (user.id !== adminId) {
+      return res.status(403).json({
+        ok: false,
+        error: "Only the configured Distortion Grid admin can clear the channel.",
+      });
+    }
+
+    const result = await clearDistortionResultsChannel();
+
+    console.log(
+      `[Admin] ${user.username} cleared Distortion Grid channel; deleted ${result.deleted} messages.`
+    );
+
+    return res.json({
+      ok: true,
+      deleted: result.deleted,
+      channelId: result.channelId,
+    });
+  } catch (error) {
+    console.error("Clear Discord channel failed:", error);
+
+    return res.status(error.status || 500).json({
+      ok: false,
+      error: error.message || "Could not clear Discord channel.",
+    });
+  }
+});
+
 /**
  * Placeholder: official attempt start endpoint.
  * This will become server-authoritative when PostgreSQL/auth are wired.

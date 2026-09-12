@@ -206,8 +206,6 @@ export async function postDistortionResult(result) {
     difficulty = "Unknown",
     moves = 0,
     par = 0,
-    perfectMin = 0,
-    scoreLabel = "",
     seconds = 0,
     streak = 0,
     rank = null,
@@ -217,28 +215,12 @@ export async function postDistortionResult(result) {
   } = result;
 
   const moveDelta = Number(moves) - Number(par);
-
-  let distortionLabel = scoreLabel;
-
-  if (!golfLabel) {
-    if (Number(perfectMin) > 0 && Number(moves) === Number(perfectMin)) distortionLabel = "Perfect Stabilization";
-    else if (moveDelta <= -3) distortionLabel = "Reality Break";
-    else if (moveDelta === -2) distortionLabel = "Rift Mastery";
-    else if (moveDelta === -1) distortionLabel = "Distortion Surge";
-    else if (moveDelta === 0) distortionLabel = "Stabilized";
-    else if (moveDelta === 1) distortionLabel = "Minor Instability";
-    else if (moveDelta === 2) distortionLabel = "Major Instability";
-    else distortionLabel = `+${moveDelta} Over Par`;
-  }
-
   const parText =
-    Number(perfectMin) > 0 && Number(moves) === Number(perfectMin)
-      ? "🎯 Perfect Route"
-      : moveDelta === 0
-        ? "Exactly Par"
-        : moveDelta > 0
-          ? `+${moveDelta} over Par`
-          : `${Math.abs(moveDelta)} under Par`;
+    moveDelta === 0
+      ? "✨ PERFECT — exactly Par!"
+      : moveDelta > 0
+        ? `+${moveDelta} over Par`
+        : `${Math.abs(moveDelta)} under Par`;
 
   const title = isChampion
     ? "👑 NEW DAILY CHAMPION"
@@ -258,8 +240,7 @@ export async function postDistortionResult(result) {
         `**Distortion Grid #${String(gridNumber).padStart(3, "0")}**`,
         `**${difficulty}**`,
         "",
-        `🔄 **${moves} moves** • Par ${par}`,
-        `🌀 **${distortionLabel}** • ${parText}`,
+        `🔄 **${moves} moves** • Par ${par} • ${parText}`,
         `⏱️ **${formatTime(seconds)}**   🔥 **${streak} streak**`,
         rank ? `🏆 **Daily Rank #${rank}**` : null,
         isPerfect ? "💫 **Perfect Stabilization!**" : null,
@@ -318,6 +299,59 @@ export async function postDistortionResult(result) {
     channelId: message.channelId,
   };
 }
+
+
+export async function clearDistortionResultsChannel() {
+  if (!client?.isReady()) {
+    throw new Error("Discord bot is not ready.");
+  }
+
+  const channelId = process.env.DISCORD_RESULTS_CHANNEL_ID;
+
+  if (!channelId) {
+    throw new Error("DISCORD_RESULTS_CHANNEL_ID is not configured.");
+  }
+
+  const channel = await client.channels.fetch(channelId);
+
+  if (!channel?.isTextBased() || !channel.messages) {
+    throw new Error("Configured results channel does not support message deletion.");
+  }
+
+  let deleted = 0;
+  let before = undefined;
+
+  while (true) {
+    const batch = await channel.messages.fetch({
+      limit: 100,
+      ...(before ? { before } : {}),
+    });
+
+    if (!batch.size) break;
+
+    const messages = [...batch.values()];
+
+    for (const message of messages) {
+      try {
+        await message.delete();
+        deleted += 1;
+      } catch (error) {
+        // Continue clearing other messages, but surface the failure in logs.
+        console.error(`Failed to delete Discord message ${message.id}:`, error);
+      }
+    }
+
+    before = messages[messages.length - 1]?.id;
+
+    if (batch.size < 100) break;
+  }
+
+  return {
+    channelId,
+    deleted,
+  };
+}
+
 
 /**
  * Development/test helper.
