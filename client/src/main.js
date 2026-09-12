@@ -1367,6 +1367,11 @@ function showTutorialProfileCheck(){
   document.getElementById('studyOverlay')?.classList.add('hidden');
   document.getElementById('board')?.classList.add('studying');
 
+  const board=document.getElementById('board');
+  if(board && !board.children.length){
+    board.innerHTML='<div style="grid-column:1/-1;display:grid;place-items:center;min-height:220px;color:#cbb9e8;font-weight:800;text-align:center;padding:20px">Checking your Distortion Grid profile…</div>';
+  }
+
   const phase=document.getElementById('phaseBanner');
   if(phase){
     phase.textContent='Checking Profile…';
@@ -2851,56 +2856,96 @@ initDiscord().then(async auth=>{
   migrateBrowserDailyAttempt();
 
   if(!isAdminTestMode()){
-    let tutorialComplete=false;
+    showTutorialProfileCheck();
+
+    // FIRST: today's official attempt is the strongest proof of player state.
+    // This also recovers users who finished onboarding before player_profiles
+    // was introduced.
+    let serverAttempt=null;
 
     try{
-      tutorialComplete=await fetchServerTutorialStatus();
+      serverAttempt=await fetchServerDailyAttempt();
     }catch(error){
-      // Fail closed rather than incorrectly replaying onboarding or starting
-      // an official attempt before the profile check succeeds.
-      showTutorialProfileCheck();
-      return;
+      console.warn('Initial daily-attempt lookup failed:',error);
     }
 
-    if(!tutorialComplete){
-      // If today's official attempt already exists from another device,
-      // preserve that state instead of forcing onboarding over it.
-      const serverAttempt=await fetchServerDailyAttempt().catch(()=>null);
+    if(serverAttempt){
+      S.serverAttempt=serverAttempt;
+      S.tutorialStatusResolved=true;
+      S.tutorialServerComplete=true;
+      localStorage.setItem(TUTORIAL_COMPLETE_KEY,'1');
+      localStorage.setItem('dg_tutorial_seen_v1','1');
 
-      if(serverAttempt){
-        S.serverAttempt=serverAttempt;
+      // Backfill the profile table without blocking startup.
+      saveServerTutorialComplete().catch(error=>{
+        console.warn('Tutorial profile backfill failed:',error);
+      });
 
-        if(serverAttempt.status==='active'){
-          // reset(false) will regenerate today's deterministic board, then
-          // prepareOfficialAttempt() will restore its rotations/timer.
-          localStorage.setItem(TUTORIAL_COMPLETE_KEY,'1');
-          S.tutorialServerComplete=true;
-          reset(false);
-          return;
-        }
-
-        showDailyLock(serverAttempt);
+      if(serverAttempt.status==='active'){
+        // Generate today's deterministic board. prepareOfficialAttempt()
+        // will receive the existing active row and restore rotations/timer.
+        reset(false);
         return;
       }
 
+      showDailyLock(serverAttempt);
+      return;
+    }
+
+    // SECOND: no attempt today, so now determine whether onboarding is needed.
+    let tutorialComplete=false;
+    let tutorialError=null;
+
+    for(let attempt=0;attempt<2;attempt++){
+      try{
+        tutorialComplete=await fetchServerTutorialStatus();
+        tutorialError=null;
+        break;
+      }catch(error){
+        tutorialError=error;
+        if(attempt===0){
+          await new Promise(resolve=>setTimeout(resolve,600));
+        }
+      }
+    }
+
+    if(tutorialError){
+      console.error('Tutorial profile check failed after retry:',tutorialError);
+
+      // If this device already knows onboarding was completed, use that as a
+      // safe fallback rather than freezing on an empty board.
+      if(localStorage.getItem(TUTORIAL_COMPLETE_KEY)==='1'){
+        S.tutorialStatusResolved=true;
+        S.tutorialServerComplete=true;
+        reset(false);
+        return;
+      }
+
+      const phase=document.getElementById('phaseBanner');
+      if(phase){
+        phase.textContent='Profile Error';
+        phase.classList.remove('live');
+      }
+
+      // A brand-new player can still use onboarding rather than being stuck.
+      S.tutorialStatusResolved=true;
+      S.tutorialServerComplete=false;
       startInteractiveTutorial();
       return;
     }
 
-    // Tutorial is already complete for this Discord user.
+    if(!tutorialComplete){
+      startInteractiveTutorial();
+      return;
+    }
+
     if(S.tutorialMode){
       hideTutorialCoach();
       document.getElementById('tutorialPracticeHint')?.classList.add('hidden');
       S.tutorialMode=false;
     }
 
-    const localAttempt=getDailyAttempt();
-
-    if(localAttempt){
-      showDailyLock(localAttempt);
-    }
-
-    // Generate/resume the normal daily grid after the cross-device profile check.
+    // Tutorial is complete and there is no attempt yet today.
     reset(false);
   }
 }).catch(err=>{
