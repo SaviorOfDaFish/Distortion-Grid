@@ -2,7 +2,7 @@ import './styles.css';
 import { initDiscord, getDiscordAuth, getDiscordAuthStatus } from './discord.js';
 
 const D={N:[-1,0],E:[0,1],S:[1,0],W:[0,-1]}, O={N:'S',E:'W',S:'N',W:'E'}, ORD=['N','E','S','W'];
-let S={n:5,tiles:[],moves:0,start:null,done:false,finished:null,timer:null,num:1,min:1,perfectMin:1,key:'',isTest:false,difficulty:'Unstable',testIndex:0,crystalCount:1,branchAttempts:5,studyTimer:null,studyRemaining:15,studying:false,soundOn:true,lastPowered:new Set(),lastPoweredCrystals:new Set(),audioCtx:null,isDailyChampion:false,leaderboardSize:5,forcedDifficulty:'Auto',studySeconds:15,gaveUp:false,activeLockerCategory:'trail',guidePaused:false,guidePauseStarted:null,guidePausedMs:0};
+let S={n:5,tiles:[],moves:0,start:null,done:false,finished:null,timer:null,num:1,min:1,perfectMin:1,key:'',isTest:false,difficulty:'Unstable',testIndex:0,crystalCount:1,branchAttempts:5,studyTimer:null,studyRemaining:15,studying:false,soundOn:true,lastPowered:new Set(),lastPoweredCrystals:new Set(),audioCtx:null,isDailyChampion:false,leaderboardSize:5,forcedDifficulty:'Auto',studySeconds:15,gaveUp:false,activeLockerCategory:'trail',guidePaused:false,guidePauseStarted:null,guidePausedMs:0,tutorialMode:false,tutorialStep:0,tutorialPracticeLive:false,tutorialPracticeSolved:false};
 
 function hash(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
 function rng(seed){return function(){let t=seed+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
@@ -598,6 +598,427 @@ function clockwiseDistanceToSolved(t){
   return 0;
 }
 
+
+const TUTORIAL_COMPLETE_KEY='dg_guided_tutorial_v2_complete';
+
+const TUTORIAL_STEPS=[
+  {
+    icon:'🌌',
+    title:'Welcome to Distortion Grid',
+    text:'This quick walkthrough shows you the entire game, then gives you a simple 6×6 practice grid. The practice does not use your daily attempt.'
+  },
+  {
+    icon:'🟢',
+    title:'Make Sure Discord Is Connected',
+    text:'Look for “Discord: Connected as …” in the top-left. Your Discord account is how Distortion Grid tracks your official daily result across devices.',
+    target:'#discordConnectionStatus'
+  },
+  {
+    icon:'🖥️',
+    title:'Your Main Display',
+    text:'This is the main Distortion Grid screen. The daily challenge information, competitive stats, puzzle board, and controls all live here.',
+    target:'.hero'
+  },
+  {
+    icon:'⏳',
+    title:'Study Phase',
+    text:'Every official grid begins with a short Study Phase. The grid is visible but locked so you can inspect the layout before the gameplay timer starts.',
+    target:'#phaseBanner'
+  },
+  {
+    icon:'▦',
+    title:'The Distortion Grid',
+    text:'The center board is the puzzle. Not every tile belongs to the solution — some are decoys. Your job is to discover the real powered route.',
+    target:'#board'
+  },
+  {
+    icon:'✦',
+    title:'Core, Crystal, Goal, and Path',
+    text:'✦ Core is where energy begins. ◆ Crystal is a required checkpoint. ◈ Goal is the final Stabilizer. ━ Path tiles rotate to carry the energy.',
+    target:'.mini-key'
+  },
+  {
+    icon:'📊',
+    title:'Moves, Par, Time, Streak, and Phase',
+    text:'Moves counts every rotation. Par is the target score. Time breaks ties. Streak tracks consecutive daily clears. Phase tells you whether you are studying, live, or finished.',
+    target:'.compact-stats'
+  },
+  {
+    icon:'🧪',
+    title:'Try a 6×6 Practice Grid',
+    text:'Now you get to play. First you will have a short 5-second practice Study Phase. Then click tiles to rotate them. Connected energy lights up automatically.',
+    target:'#board',
+    practiceStart:true
+  }
+];
+
+const TUTORIAL_AFTER_PRACTICE=[
+  {
+    icon:'✅',
+    title:'Grid Complete!',
+    text:'You did it. A real daily solve ends when the powered route travels from the Core, through every required Crystal, and reaches the Goal.'
+  },
+  {
+    icon:'✦',
+    title:'Cosmetic Locker',
+    text:'The ✦ Locker lets you equip unlocked Energy Trails, Board Frames, and Completion Effects. Cosmetics never change puzzle scoring.',
+    target:'#lockerBtn'
+  },
+  {
+    icon:'🔊',
+    title:'Sound Controls',
+    text:'Use the speaker button to turn the electric connection sounds and completion effects on or off.',
+    target:'#soundBtn'
+  },
+  {
+    icon:'ⓘ',
+    title:'How to Play Guide',
+    text:'The Guide contains the rules, difficulty levels, and Distortion Ratings. Opening it during live gameplay pauses your gameplay timer.',
+    target:'#infoBtn'
+  },
+  {
+    icon:'🚫',
+    title:'Give Up',
+    text:'If you get completely stuck, Give Up ends the official attempt as Incomplete and reveals the correct Par route. Giving up still uses your one daily attempt.',
+    target:'#giveUp'
+  },
+  {
+    icon:'💥',
+    title:'Cataclysm',
+    text:'Daily difficulty is randomized. Cataclysm is the biggest version: a 7×7 grid with 3 Crystals and the most complex route.',
+    extra:'cataclysm'
+  },
+  {
+    icon:'💬',
+    title:'Results Post Automatically',
+    text:'When you finish an official grid, your verified Discord name, avatar, score, and a covered teaser of the board are automatically posted in the Distortion Grid channel.'
+  },
+  {
+    icon:'📅',
+    title:'One Official Grid Per Day',
+    text:'You get one official attempt per Discord account each day. Finish on your phone and your computer will know you already played — and vice versa.'
+  },
+  {
+    icon:'🚀',
+    title:'Ready for Today’s Grid?',
+    text:'The tutorial is complete. Your next button starts the real daily challenge. From this point on, the official one-attempt-per-day rules apply.',
+    ready:true
+  }
+];
+
+function clearTutorialHighlight(){
+  document.querySelectorAll('.tutorial-highlight').forEach(el=>el.classList.remove('tutorial-highlight'));
+}
+
+function highlightTutorialTarget(selector){
+  clearTutorialHighlight();
+  if(!selector) return;
+
+  const el=document.querySelector(selector);
+  if(!el) return;
+
+  el.classList.add('tutorial-highlight');
+
+  try{
+    el.scrollIntoView({behavior:'smooth',block:'center',inline:'center'});
+  }catch{}
+}
+
+function tutorialCataclysmPreview(){
+  let cells='';
+  for(let i=0;i<49;i++){
+    const special=[3,17,31,45].includes(i);
+    cells+=`<span class="${special?'special':''}"></span>`;
+  }
+
+  return `
+    <div class="tutorial-cataclysm-preview" aria-label="Covered 7 by 7 Cataclysm preview">
+      ${cells}
+    </div>
+    <small>A covered 7×7 example — the real route stays hidden.</small>
+  `;
+}
+
+function tutorialAllSteps(){
+  return [...TUTORIAL_STEPS,...TUTORIAL_AFTER_PRACTICE];
+}
+
+function showTutorialCoach(){
+  document.getElementById('tutorialModal')?.classList.remove('hidden');
+}
+
+function hideTutorialCoach(){
+  document.getElementById('tutorialModal')?.classList.add('hidden');
+  clearTutorialHighlight();
+}
+
+function renderTutorialStep(){
+  const all=tutorialAllSteps();
+  const step=all[S.tutorialStep];
+
+  if(!step) return;
+
+  const icon=document.getElementById('tutorialCoachIcon');
+  const title=document.getElementById('tutorialCoachTitle');
+  const text=document.getElementById('tutorialCoachText');
+  const extra=document.getElementById('tutorialExtra');
+  const back=document.getElementById('tutorialBack');
+  const next=document.getElementById('tutorialNext');
+  const progress=document.getElementById('tutorialProgressText');
+
+  icon.textContent=step.icon||'✦';
+  title.textContent=step.title;
+  text.textContent=step.text;
+  progress.textContent=`${S.tutorialStep+1} / ${all.length}`;
+
+  extra.innerHTML='';
+  extra.classList.add('hidden');
+
+  if(step.extra==='cataclysm'){
+    extra.innerHTML=tutorialCataclysmPreview();
+    extra.classList.remove('hidden');
+  }
+
+  back.disabled=S.tutorialStep===0 || S.tutorialPracticeLive;
+
+  if(step.practiceStart){
+    next.textContent='Start 6×6 Practice';
+    next.classList.add('tutorial-ready-button');
+  }else if(step.ready){
+    next.textContent='READY FOR TODAY’S GRID';
+    next.classList.add('tutorial-ready-button');
+  }else{
+    next.textContent='Next';
+    next.classList.remove('tutorial-ready-button');
+  }
+
+  highlightTutorialTarget(step.target);
+  showTutorialCoach();
+}
+
+function tutorialConnect(a,b){
+  const dr=b.r-a.r,dc=b.c-a.c;
+  const d=dr===-1?'N':dr===1?'S':dc===1?'E':'W';
+
+  if(!a.base.includes(d)) a.base.push(d);
+  if(!b.base.includes(O[d])) b.base.push(O[d]);
+}
+
+function buildTutorialPracticeGrid(){
+  clearInterval(S.timer);
+  clearInterval(S.studyTimer);
+
+  S.tutorialMode=true;
+  S.tutorialPracticeLive=false;
+  S.tutorialPracticeSolved=false;
+  S.isTest=true;
+  S.n=6;
+  S.difficulty='Tutorial';
+  S.crystalCount=1;
+  S.moves=0;
+  S.start=null;
+  S.done=false;
+  S.finished=null;
+  S.studying=false;
+  S.gaveUp=false;
+  S.lastPowered=new Set();
+  S.lastPoweredCrystals=new Set();
+  S.guidePaused=false;
+  S.guidePauseStarted=null;
+  S.guidePausedMs=0;
+  S.key='tutorial-practice';
+
+  const tiles=Array.from({length:6},(_,r)=>
+    Array.from({length:6},(_,c)=>({
+      r,c,base:[],rot:0,kind:'decoy',on:false,required:false
+    }))
+  );
+
+  const route=[
+    {r:5,c:0},
+    {r:4,c:0},
+    {r:3,c:0},
+    {r:2,c:0},
+    {r:2,c:1},
+    {r:2,c:2},
+    {r:2,c:3},
+    {r:2,c:4},
+    {r:3,c:4},
+    {r:4,c:4},
+    {r:4,c:5},
+    {r:3,c:5},
+    {r:2,c:5},
+    {r:1,c:5},
+    {r:0,c:5}
+  ];
+
+  route.forEach(p=>{
+    const t=tiles[p.r][p.c];
+    t.required=true;
+    t.kind='normal';
+  });
+
+  for(let i=0;i<route.length-1;i++){
+    tutorialConnect(
+      tiles[route[i].r][route[i].c],
+      tiles[route[i+1].r][route[i+1].c]
+    );
+  }
+
+  tiles[5][0].kind='core';
+  tiles[2][2].kind='crystal';
+  tiles[0][5].kind='exit';
+
+  const decoys=[
+    ['N','S'],['E','W'],['N','E'],['E','S'],['S','W'],['W','N'],
+    ['N'],['E'],['S'],['W']
+  ];
+
+  let di=0;
+  tiles.flat().forEach(t=>{
+    if(!t.required){
+      t.base=[...decoys[di%decoys.length]];
+      t.rot=(di*3+1)%4;
+      di++;
+    }
+  });
+
+  // Controlled scramble: the practice route only needs a small number of clicks.
+  const rotations=[1,0,3,0,1,0,3,0,1,0,3,0,1,0,1];
+  route.forEach((p,i)=>{
+    tiles[p.r][p.c].rot=rotations[i]%4;
+  });
+
+  S.tiles=tiles;
+  S.perfectMin=Math.max(
+    1,
+    route.reduce((sum,p)=>sum+clockwiseDistanceToSolved(tiles[p.r][p.c]),0)
+  );
+  S.min=S.perfectMin+3;
+  S.num=0;
+
+  document.body.classList.remove('theme-stable','theme-fractured','theme-cataclysm');
+  document.body.classList.add('theme-unstable');
+
+  const badge=document.getElementById('difficultyBadge');
+  badge.textContent='PRACTICE';
+  badge.className='badge diff-unstable';
+
+  const board=document.getElementById('board');
+  board.style.gridTemplateColumns='repeat(6,1fr)';
+
+  document.getElementById('gridNum').textContent='Tutorial Grid';
+  document.getElementById('moves').textContent='0';
+  document.getElementById('par').textContent=S.min;
+  document.getElementById('time').textContent='0:00';
+
+  const phase=document.getElementById('phaseBanner');
+  phase.textContent='Tutorial';
+  phase.classList.remove('live');
+
+  document.getElementById('giveUp')?.setAttribute('disabled','disabled');
+  document.getElementById('new')?.setAttribute('disabled','disabled');
+
+  render();
+  applyCosmetics();
+}
+
+function startTutorialPractice(){
+  hideTutorialCoach();
+
+  S.tutorialPracticeLive=true;
+  S.studying=true;
+  S.studyRemaining=5;
+
+  const board=document.getElementById('board');
+  const overlay=document.getElementById('studyOverlay');
+  const countdown=document.getElementById('studyCountdown');
+  const phase=document.getElementById('phaseBanner');
+  const hint=document.getElementById('tutorialPracticeHint');
+
+  board?.classList.add('studying');
+  overlay?.classList.remove('hidden');
+  hint?.classList.remove('hidden');
+
+  if(countdown) countdown.textContent='5';
+  if(phase){
+    phase.textContent='Practice Study 5s';
+    phase.classList.remove('live');
+  }
+
+  S.studyTimer=setInterval(()=>{
+    S.studyRemaining--;
+
+    if(countdown) countdown.textContent=String(Math.max(0,S.studyRemaining));
+    if(phase) phase.textContent=`Practice Study ${Math.max(0,S.studyRemaining)}s`;
+
+    if(S.studyRemaining<=0){
+      clearInterval(S.studyTimer);
+      S.studying=false;
+      board?.classList.remove('studying');
+      overlay?.classList.add('hidden');
+
+      if(phase){
+        phase.textContent='Practice Live';
+        phase.classList.add('live');
+      }
+
+      startClock();
+    }
+  },1000);
+}
+
+function finishTutorialPractice(){
+  if(S.tutorialPracticeSolved) return;
+
+  clearInterval(S.timer);
+  clearInterval(S.studyTimer);
+
+  S.tutorialPracticeSolved=true;
+  S.tutorialPracticeLive=false;
+  S.done=true;
+  S.finished=Date.now();
+
+  document.getElementById('tutorialPracticeHint')?.classList.add('hidden');
+
+  const board=document.getElementById('board');
+  board?.querySelectorAll('.tile').forEach(el=>{
+    el.classList.add('on-complete');
+  });
+
+  overloadSound();
+
+  // Resume tutorial immediately after the practice step.
+  S.tutorialStep=TUTORIAL_STEPS.length;
+  setTimeout(()=>{
+    renderTutorialStep();
+  },650);
+}
+
+function startInteractiveTutorial(){
+  buildTutorialPracticeGrid();
+  S.tutorialStep=0;
+  renderTutorialStep();
+}
+
+function completeInteractiveTutorial(){
+  localStorage.setItem(TUTORIAL_COMPLETE_KEY,'1');
+  // Keep the legacy key set so older code/builds also consider onboarding complete.
+  localStorage.setItem('dg_tutorial_seen_v1','1');
+
+  S.tutorialMode=false;
+  S.tutorialPracticeLive=false;
+  S.tutorialPracticeSolved=false;
+
+  hideTutorialCoach();
+  document.getElementById('tutorialPracticeHint')?.classList.add('hidden');
+  document.getElementById('giveUp')?.removeAttribute('disabled');
+  document.getElementById('new')?.removeAttribute('disabled');
+
+  // This enters the normal server-checked daily flow.
+  reset(false);
+}
+
 function gen(seed){
   const R=rng(seed), n=S.n;
 
@@ -991,7 +1412,21 @@ function solved(){
 
   return routeOriented && routePowered && goal?.on && crystals.every(c=>c.on);
 }
-function turn(r,c){if(S.done||S.studying)return;startClock();let t=S.tiles[r][c];t.rot=(t.rot+1)%4;S.moves++;render();if(solved())finish()}
+function turn(r,c){
+  if(S.done||S.studying)return;
+  if(S.tutorialMode && !S.tutorialPracticeLive)return;
+
+  startClock();
+  let t=S.tiles[r][c];
+  t.rot=(t.rot+1)%4;
+  S.moves++;
+  render();
+
+  if(solved()){
+    if(S.tutorialMode) finishTutorialPractice();
+    else finish();
+  }
+}
 function stars(){return distortionScore().label}
 function text(){
   return `🌌 DISTORTION GRID #${String(S.num).padStart(3,'0')}
@@ -1411,6 +1846,24 @@ function reset(test=false){
 
   S.moves=0;S.start=null;S.done=false;S.finished=null;S.isTest=test;S.guidePaused=false;S.guidePauseStarted=null;S.guidePausedMs=0;S.lastPowered=new Set();S.lastPoweredCrystals=new Set();S.isDailyChampion=false;S.gaveUp=false;
 
+  const guidedTutorialComplete=localStorage.getItem(TUTORIAL_COMPLETE_KEY)==='1';
+
+  // On a true first launch, onboarding happens before the official daily puzzle.
+  if(!test && !guidedTutorialComplete){
+    const existingAttempt=getDailyAttempt();
+
+    // If this device already knows the player used today's attempt, preserve the lock.
+    if(existingAttempt){
+      showDailyLock(existingAttempt);
+      return;
+    }
+
+    startInteractiveTutorial();
+    return;
+  }
+
+  S.tutorialMode=false;
+
   if(test){
     S.testIndex=(S.testIndex+1)%DIFFICULTIES.length;
     const diff=DIFFICULTIES[S.testIndex];
@@ -1449,25 +1902,45 @@ function reset(test=false){
     return;
   }
 
-  const seenTutorial=localStorage.getItem('dg_tutorial_seen_v1')==='1';
-  if(!seenTutorial && !test){
-    clearInterval(S.studyTimer);
-    S.studying=true;
-    document.getElementById('studyOverlay')?.classList.add('hidden');
-    document.getElementById('tutorialModal').classList.remove('hidden');
-  }else{
-    startStudyPhase();
-  }
+  startStudyPhase();
 }
 
 
 
-document.getElementById('tutorialStart').onclick=()=>{
-  localStorage.setItem('dg_tutorial_seen_v1','1');
-  document.getElementById('tutorialModal').classList.add('hidden');
-  startStudyPhase();
+
+
+
+document.getElementById('tutorialBack').onclick=()=>{
+  if(S.tutorialPracticeLive)return;
+
+  const practiceIndex=TUTORIAL_STEPS.length-1;
+
+  if(S.tutorialStep===TUTORIAL_STEPS.length){
+    S.tutorialStep=practiceIndex;
+  }else{
+    S.tutorialStep=Math.max(0,S.tutorialStep-1);
+  }
+
+  renderTutorialStep();
 };
 
+document.getElementById('tutorialNext').onclick=()=>{
+  const all=tutorialAllSteps();
+  const step=all[S.tutorialStep];
+
+  if(step?.practiceStart){
+    startTutorialPractice();
+    return;
+  }
+
+  if(step?.ready){
+    completeInteractiveTutorial();
+    return;
+  }
+
+  S.tutorialStep=Math.min(all.length-1,S.tutorialStep+1);
+  renderTutorialStep();
+};
 
 loadAdminSettings();
 
@@ -1515,7 +1988,8 @@ document.getElementById('adminResetLeaderboard').onclick=()=>{
 
 document.getElementById('adminResetTutorial').onclick=()=>{
   localStorage.removeItem('dg_tutorial_seen_v1');
-  adminMessage('First-play tutorial reset.');
+  localStorage.removeItem(TUTORIAL_COMPLETE_KEY);
+  adminMessage('Guided first-play tutorial reset. It will run on the next normal load.');
 };
 
 document.getElementById('adminResetStreak').onclick=()=>{
