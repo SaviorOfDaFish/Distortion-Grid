@@ -16,7 +16,9 @@ import {
   initDatabase,
   isDatabaseReady,
   getDailyAttempt,
-  recordDailyAttempt,
+  startDailyAttempt,
+  updateActiveAttemptState,
+  finalizeDailyAttempt,
   deleteDailyAttempt,
   todayMountainDate,
 } from "./database.js";
@@ -299,7 +301,7 @@ app.post("/api/activity-result", async (req, res) => {
       });
     }
 
-    const saved = await recordDailyAttempt({
+    const saved = await finalizeDailyAttempt({
       discordUserId: result.discordUserId,
       status: "complete",
       gridNumber: result.gridNumber,
@@ -310,9 +312,10 @@ app.post("/api/activity-result", async (req, res) => {
       seconds: result.seconds,
       rating: result.scoreLabel || null,
       rank: result.rank,
+      state: body.state && typeof body.state === "object" ? body.state : null,
     });
 
-    if (!saved.inserted) {
+    if (!saved.finalized) {
       const existing = saved.attempt;
 
       const sameCompletion =
@@ -323,9 +326,9 @@ app.post("/api/activity-result", async (req, res) => {
 
       if (!sameCompletion) {
         return res.status(409).json({
-          ok: false,
-          error: "Your official Distortion Grid attempt for today is already recorded.",
-          attempt: existing,
+          ok:false,
+          error:"Your official Distortion Grid attempt for today is already recorded.",
+          attempt:existing,
         });
       }
     }
@@ -421,6 +424,73 @@ async function getDiscordUserFromBearer(req) {
 }
 
 /**
+ * Start or resume today's official attempt.
+ */
+app.post("/api/attempts/start", async (req, res) => {
+  if (!isDatabaseReady()) {
+    return res.status(503).json({ ok:false, error:"Database is still connecting." });
+  }
+
+  try {
+    const user = await getDiscordUserFromBearer(req);
+    const body = req.body ?? {};
+
+    const attempt = await startDailyAttempt({
+      discordUserId: user.id,
+      gridNumber: Math.max(0, Math.floor(Number(body.gridNumber) || 0)),
+      difficulty: ["Stable","Unstable","Fractured","Cataclysm"].includes(body.difficulty)
+        ? body.difficulty
+        : "Unknown",
+      moves: Math.max(0, Math.floor(Number(body.moves) || 0)),
+      par: Math.max(0, Math.floor(Number(body.par) || 0)),
+      perfectMin: Math.max(0, Math.floor(Number(body.perfectMin) || 0)),
+      studySeconds: Math.max(0, Math.min(120, Math.floor(Number(body.studySeconds) || 15))),
+      state: body.state && typeof body.state === "object" ? body.state : null,
+    });
+
+    return res.json({ ok:true, attempt });
+  } catch (error) {
+    console.error("Daily attempt start/resume failed:", error);
+    return res.status(error.status || 500).json({
+      ok:false,
+      error:error.message || "Could not start today's attempt."
+    });
+  }
+});
+
+app.put("/api/attempts/state", async (req, res) => {
+  if (!isDatabaseReady()) {
+    return res.status(503).json({ ok:false, error:"Database is still connecting." });
+  }
+
+  try {
+    const user = await getDiscordUserFromBearer(req);
+    const body = req.body ?? {};
+
+    const attempt = await updateActiveAttemptState({
+      discordUserId:user.id,
+      moves:Math.max(0, Math.floor(Number(body.moves) || 0)),
+      state:body.state && typeof body.state === "object" ? body.state : null,
+    });
+
+    if (!attempt) {
+      return res.status(409).json({
+        ok:false,
+        error:"Today's official attempt is no longer active."
+      });
+    }
+
+    return res.json({ ok:true, attempt });
+  } catch (error) {
+    console.error("Daily attempt state save failed:", error);
+    return res.status(error.status || 500).json({
+      ok:false,
+      error:error.message || "Could not save the current puzzle state."
+    });
+  }
+});
+
+/**
  * Server-authoritative official daily attempt lookup.
  * This is what makes the one-grid-per-day rule work across devices.
  */
@@ -466,7 +536,7 @@ app.post("/api/attempts/give-up", async (req, res) => {
     const user = await getDiscordUserFromBearer(req);
     const body = req.body ?? {};
 
-    const saved = await recordDailyAttempt({
+    const saved = await finalizeDailyAttempt({
       discordUserId: user.id,
       status: "incomplete",
       gridNumber: Math.max(0, Math.floor(Number(body.gridNumber) || 0)),
@@ -480,11 +550,12 @@ app.post("/api/attempts/give-up", async (req, res) => {
       perfectMin: Math.max(0, Math.floor(Number(body.perfectMin) || 0)),
       seconds: Math.max(0, Math.floor(Number(body.seconds) || 0)),
       rating: "Incomplete",
+      state: body.state && typeof body.state === "object" ? body.state : null,
     });
 
     return res.json({
       ok: true,
-      inserted: saved.inserted,
+      finalized: saved.finalized,
       attempt: saved.attempt,
     });
   } catch (error) {
