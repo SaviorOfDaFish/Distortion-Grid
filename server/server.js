@@ -439,7 +439,21 @@ app.get("/api/player/tutorial", async (req, res) => {
 
   try {
     const user = await getDiscordUserFromBearer(req);
-    const profile = await getPlayerProfile(user.id);
+    let profile = await getPlayerProfile(user.id);
+
+    // Backward compatibility:
+    // anyone who already has an official daily attempt necessarily made it
+    // through onboarding before player_profiles existed.
+    if (!profile.tutorialComplete) {
+      const existingAttempt = await getDailyAttempt(user.id);
+
+      if (existingAttempt) {
+        profile = await markTutorialComplete(user.id);
+        console.log(
+          `[Tutorial] Backfilled completion for ${user.username} from existing daily attempt.`
+        );
+      }
+    }
 
     return res.json({
       ok: true,
