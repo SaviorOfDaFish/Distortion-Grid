@@ -1031,13 +1031,49 @@ function revealParPath(){
   board?.classList.add('par-revealed');
 }
 
+let giveUpArmedUntil=0;
+
+function resetGiveUpButton(){
+  const btn=document.getElementById('giveUp');
+  if(!btn) return;
+
+  btn.textContent='Give Up';
+  btn.classList.remove('confirming');
+  giveUpArmedUntil=0;
+}
+
 function giveUp(){
   if(S.done || S.gaveUp) return;
 
-  const ok=window.confirm(
-    "Give up on today's Distortion?\n\nYour attempt will be marked Incomplete and the Par solution will be revealed."
-  );
-  if(!ok) return;
+  const btn=document.getElementById('giveUp');
+  const now=Date.now();
+
+  // Discord Activities can block native window.confirm(), so use an
+  // in-app two-click confirmation instead.
+  if(now>giveUpArmedUntil){
+    giveUpArmedUntil=now+6000;
+
+    if(btn){
+      btn.textContent='CONFIRM GIVE UP';
+      btn.classList.add('confirming');
+    }
+
+    setTimeout(()=>{
+      if(Date.now()>giveUpArmedUntil && !S.done && !S.gaveUp){
+        resetGiveUpButton();
+      }
+    },6100);
+
+    return;
+  }
+
+  giveUpArmedUntil=0;
+
+  if(btn){
+    btn.disabled=true;
+    btn.textContent='Giving Up…';
+    btn.classList.remove('confirming');
+  }
 
   clearInterval(S.timer);
   clearInterval(S.studyTimer);
@@ -1059,6 +1095,7 @@ function giveUp(){
 
   // Preserve the time/moves they had when they surrendered.
   const elapsed=secondsTaken();
+
   if(!S.isTest){
     const incompleteAttempt={
       status:'incomplete',
@@ -1082,7 +1119,6 @@ function giveUp(){
   document.getElementById('gTime').textContent=formatSec(elapsed);
   document.getElementById('giveUpResult').classList.remove('hidden');
 }
-
 function lightWholeBoardForCompletion(){
   const board=document.getElementById('board');
   if(!board) return;
@@ -1303,6 +1339,7 @@ function reset(test=false){
   const nr=document.getElementById('newRecord'); if(nr) nr.classList.add('hidden'); const pn=document.getElementById('personalNote'); if(pn) pn.classList.add('hidden');
   const st=document.getElementById('status'); if(st) st.textContent='';
   document.getElementById('giveUp')?.removeAttribute('disabled');
+  resetGiveUpButton();
   updateRecordPanel();
   updateTestButton();
   updateTestModeUI();
@@ -1399,6 +1436,69 @@ document.getElementById('adminUnlockCosmetics').onclick=()=>{
   applyCosmetics();
   adminMessage('All cosmetics unlocked for testing on this browser.');
 };
+
+let clearDiscordChannelArmedUntil=0;
+
+document.getElementById('adminClearDiscordChannel').onclick=async()=>{
+  const btn=document.getElementById('adminClearDiscordChannel');
+  const now=Date.now();
+
+  if(now>clearDiscordChannelArmedUntil){
+    clearDiscordChannelArmedUntil=now+6000;
+    btn.textContent='CONFIRM CLEAR DISCORD CHANNEL';
+    adminMessage('Click again within 6 seconds to delete messages from the Distortion Grid Discord channel.');
+
+    setTimeout(()=>{
+      if(Date.now()>clearDiscordChannelArmedUntil){
+        btn.textContent='Clear Discord Channel';
+        clearDiscordChannelArmedUntil=0;
+      }
+    },6100);
+
+    return;
+  }
+
+  clearDiscordChannelArmedUntil=0;
+  btn.disabled=true;
+  btn.textContent='Clearing…';
+  adminMessage('Deleting messages from the Discord channel…');
+
+  try{
+    let auth=getDiscordAuth();
+
+    if(!auth?.access_token){
+      auth=await initDiscord();
+    }
+
+    if(!auth?.access_token){
+      throw new Error('Discord authentication is not ready.');
+    }
+
+    const response=await fetch('/api/admin/clear-discord-channel',{
+      method:'POST',
+      headers:{
+        'Authorization':`Bearer ${auth.access_token}`,
+        'Content-Type':'application/json'
+      },
+      body:'{}'
+    });
+
+    const data=await response.json().catch(()=>({}));
+
+    if(!response.ok){
+      throw new Error(data.error||response.statusText||'Could not clear Discord channel.');
+    }
+
+    adminMessage(`Discord channel cleared. Deleted ${data.deleted||0} messages.`);
+  }catch(error){
+    console.error('Clear Discord channel failed:',error);
+    adminMessage(`Could not clear Discord channel: ${error?.message||error}`);
+  }finally{
+    btn.disabled=false;
+    btn.textContent='Clear Discord Channel';
+  }
+};
+
 
 document.getElementById('adminToggleTestMode').onclick=()=>{
   const enabling=!isAdminTestMode();
