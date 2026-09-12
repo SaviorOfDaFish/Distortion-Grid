@@ -111,24 +111,41 @@ function dailyAttemptStorageKey(playerId=officialPlayerId()){
   return `dg_daily_attempt_${today()}_${playerId}`;
 }
 
-function getDailyAttempt(){
+function dailyAttemptFallbackKey(){
+  return `dg_daily_attempt_${today()}`;
+}
+
+function parseStoredAttempt(key){
   try{
-    return JSON.parse(localStorage.getItem(dailyAttemptStorageKey())||'null');
+    return JSON.parse(localStorage.getItem(key)||'null');
   }catch{
     return null;
   }
 }
 
+function getDailyAttempt(){
+  // Prefer the authenticated Discord-user lock.
+  const scoped=parseStoredAttempt(dailyAttemptStorageKey());
+  if(scoped) return scoped;
+
+  // Fallback prevents the puzzle from restarting while Discord auth is still loading.
+  return parseStoredAttempt(dailyAttemptFallbackKey());
+}
+
 function saveDailyAttempt(attempt){
   if(S.isTest || isAdminTestMode()) return;
-  localStorage.setItem(
-    dailyAttemptStorageKey(),
-    JSON.stringify({
-      date:today(),
-      playerId:officialPlayerId(),
-      ...attempt
-    })
-  );
+
+  const stored={
+    date:today(),
+    playerId:officialPlayerId(),
+    ...attempt
+  };
+
+  // Always save a same-day fallback immediately.
+  localStorage.setItem(dailyAttemptFallbackKey(),JSON.stringify(stored));
+
+  // Also save the Discord-scoped record whenever identity is available.
+  localStorage.setItem(dailyAttemptStorageKey(),JSON.stringify(stored));
 }
 
 function migrateBrowserDailyAttempt(){
@@ -136,10 +153,17 @@ function migrateBrowserDailyAttempt(){
   if(!userId) return;
 
   const browserKey=`dg_daily_attempt_${today()}_browser`;
+  const fallbackKey=dailyAttemptFallbackKey();
   const userKey=`dg_daily_attempt_${today()}_${userId}`;
 
-  if(!localStorage.getItem(userKey) && localStorage.getItem(browserKey)){
-    localStorage.setItem(userKey,localStorage.getItem(browserKey));
+  const source=
+    localStorage.getItem(userKey) ||
+    localStorage.getItem(fallbackKey) ||
+    localStorage.getItem(browserKey);
+
+  if(source){
+    localStorage.setItem(userKey,source);
+    localStorage.setItem(fallbackKey,source);
   }
 
   localStorage.removeItem(browserKey);
@@ -176,6 +200,12 @@ function showDailyLock(attempt){
 
   document.getElementById('dailyLockedModal')?.classList.remove('hidden');
   document.getElementById('giveUp')?.setAttribute('disabled','disabled');
+
+  // Prevent any board clicks if the daily attempt is already consumed.
+  document.querySelectorAll('#board .tile').forEach(tile=>{
+    tile.disabled=true;
+  });
+
   return true;
 }
 
@@ -1226,6 +1256,9 @@ function finish(){
     completedAt:Date.now()
   });
 
+  // The official attempt is consumed immediately once completed.
+  document.getElementById('giveUp')?.setAttribute('disabled','disabled');
+
   // Post the completed result into the configured Discord results channel.
   // This intentionally happens after local rank/champion status is calculated.
   postCompletedResultToDiscord({
@@ -1389,16 +1422,34 @@ document.getElementById('adminToggleTestMode').onclick=()=>{
   }
 };
 
+let resetEverythingArmedUntil=0;
+
 document.getElementById('adminResetEverything').onclick=()=>{
-  const confirmed=window.confirm(
-    'Reset EVERYTHING for Distortion Grid on this browser?\n\n' +
-    'This clears cosmetics, cosmetic progress, streaks, tutorial status, ' +
-    'leaderboards, personal history, test records, and admin settings.\n\n' +
-    'This cannot be undone.'
-  );
+  const btn=document.getElementById('adminResetEverything');
+  const now=Date.now();
 
-  if(!confirmed) return;
+  if(now>resetEverythingArmedUntil){
+    resetEverythingArmedUntil=now+6000;
+    btn.textContent='CONFIRM RESET EVERYTHING';
+    btn.classList.add('admin-danger');
+    adminMessage('Click RESET EVERYTHING again within 6 seconds to confirm.');
 
+    setTimeout(()=>{
+      if(Date.now()>resetEverythingArmedUntil){
+        btn.textContent='Reset Everything';
+        resetEverythingArmedUntil=0;
+      }
+    },6100);
+
+    return;
+  }
+
+  resetEverythingArmedUntil=0;
+  btn.disabled=true;
+  btn.textContent='Resetting…';
+  adminMessage('Clearing all Distortion Grid data…');
+
+  // Clear every Distortion Grid key, including daily locks and Test Mode.
   const keysToRemove=[];
   for(let i=0;i<localStorage.length;i++){
     const key=localStorage.key(i);
@@ -1415,10 +1466,22 @@ document.getElementById('adminResetEverything').onclick=()=>{
 
   keysToRemove.forEach(key=>localStorage.removeItem(key));
 
-  // Restore the default prototype admin password after the reset.
+  // Clear any session-only state too.
+  const sessionKeys=[];
+  for(let i=0;i<sessionStorage.length;i++){
+    const key=sessionStorage.key(i);
+    if(key && (key.startsWith('dg_') || key.startsWith('distortion_'))){
+      sessionKeys.push(key);
+    }
+  }
+  sessionKeys.forEach(key=>sessionStorage.removeItem(key));
+
+  // Restore only the prototype admin password.
   localStorage.setItem('dg_admin_password','distortion123');
 
-  window.location.reload();
+  setTimeout(()=>{
+    window.location.replace(window.location.href);
+  },250);
 };
 
 
@@ -1585,7 +1648,18 @@ initDiscord().then(auth=>{
   }
 
   migrateBrowserDailyAttempt();
-  enforceDailyAttemptLock();
+
+  if(!isAdminTestMode()){
+    const attempt=getDailyAttempt();
+
+    if(attempt){
+      document.getElementById('result')?.classList.add('hidden');
+      document.getElementById('giveUpResult')?.classList.add('hidden');
+      document.getElementById('tutorialModal')?.classList.add('hidden');
+      document.getElementById('studyOverlay')?.classList.add('hidden');
+      showDailyLock(attempt);
+    }
+  }
 }).catch(err=>{
   console.error('Discord SDK authentication failed:',err);
   updateDiscordStatusBadge({stage:'error',error:err?.message||String(err)});
