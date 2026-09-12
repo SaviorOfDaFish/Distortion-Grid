@@ -947,22 +947,82 @@ const TUTORIAL_AFTER_PRACTICE=[
   }
 ];
 
+function setTutorialPageMode(enabled){
+  document.documentElement.classList.toggle('tutorial-page-mode',enabled);
+  document.body.classList.toggle('tutorial-page-mode',enabled);
+}
+
 function clearTutorialHighlight(){
   document.querySelectorAll('.tutorial-highlight').forEach(el=>el.classList.remove('tutorial-highlight'));
+
+  const mask=document.getElementById('tutorialModal');
+  if(mask){
+    mask.classList.remove('coach-top','coach-bottom','coach-center');
+  }
+}
+
+function positionTutorialCoachForTarget(el){
+  const mask=document.getElementById('tutorialModal');
+  if(!mask) return;
+
+  mask.classList.remove('coach-top','coach-bottom','coach-center');
+
+  if(!el){
+    mask.classList.add('coach-bottom');
+    return;
+  }
+
+  const rect=el.getBoundingClientRect();
+  const center=rect.top+(rect.height/2);
+
+  // Put the coach opposite the target so the explanation doesn't cover it.
+  if(center < window.innerHeight*0.52){
+    mask.classList.add('coach-bottom');
+  }else{
+    mask.classList.add('coach-top');
+  }
+}
+
+function centerTutorialTarget(selector,{instant=false}={}){
+  if(!selector) return false;
+
+  const el=document.querySelector(selector);
+  if(!el) return false;
+
+  setTutorialPageMode(true);
+
+  try{
+    el.scrollIntoView({
+      behavior:instant?'auto':'smooth',
+      block:'center',
+      inline:'nearest'
+    });
+  }catch{
+    try{el.scrollIntoView()}catch{}
+  }
+
+  // Reposition the coach after scrolling settles.
+  setTimeout(()=>positionTutorialCoachForTarget(el),instant?0:280);
+  return true;
 }
 
 function highlightTutorialTarget(selector){
   clearTutorialHighlight();
-  if(!selector) return;
+
+  if(!selector){
+    positionTutorialCoachForTarget(null);
+    return;
+  }
 
   const el=document.querySelector(selector);
-  if(!el) return;
+
+  if(!el){
+    positionTutorialCoachForTarget(null);
+    return;
+  }
 
   el.classList.add('tutorial-highlight');
-
-  try{
-    el.scrollIntoView({behavior:'smooth',block:'center',inline:'center'});
-  }catch{}
+  centerTutorialTarget(selector,{instant:false});
 }
 
 function tutorialCataclysmPreview(){
@@ -985,12 +1045,14 @@ function tutorialAllSteps(){
 }
 
 function showTutorialCoach(){
+  setTutorialPageMode(true);
   document.getElementById('tutorialModal')?.classList.remove('hidden');
 }
 
 function hideTutorialCoach(){
   document.getElementById('tutorialModal')?.classList.add('hidden');
   clearTutorialHighlight();
+  setTutorialPageMode(false);
 }
 
 function renderTutorialStep(){
@@ -1004,6 +1066,7 @@ function renderTutorialStep(){
   const text=document.getElementById('tutorialCoachText');
   const extra=document.getElementById('tutorialExtra');
   const back=document.getElementById('tutorialBack');
+  const showMe=document.getElementById('tutorialShowMe');
   const next=document.getElementById('tutorialNext');
   const progress=document.getElementById('tutorialProgressText');
 
@@ -1021,6 +1084,12 @@ function renderTutorialStep(){
   }
 
   back.disabled=S.tutorialStep===0 || S.tutorialPracticeLive;
+
+  if(showMe){
+    showMe.classList.toggle('hidden',!step.target);
+    showMe.disabled=!step.target;
+    showMe.dataset.target=step.target||'';
+  }
 
   if(step.practiceStart){
     next.textContent='Start 6×6 Practice';
@@ -1166,6 +1235,7 @@ function buildTutorialPracticeGrid(){
 
 function startTutorialPractice(){
   hideTutorialCoach();
+  setTutorialPageMode(false);
 
   S.tutorialPracticeLive=true;
   S.studying=true;
@@ -1261,6 +1331,7 @@ function completeInteractiveTutorial(){
   // Completely remove every tutorial layer before loading the official puzzle.
   hideTutorialCoach();
   clearTutorialHighlight();
+  setTutorialPageMode(false);
   document.getElementById('tutorialModal')?.classList.add('hidden');
   document.getElementById('tutorialPracticeHint')?.classList.add('hidden');
   document.getElementById('studyOverlay')?.classList.add('hidden');
@@ -2193,6 +2264,25 @@ function reset(test=false){
 
 
 
+
+document.getElementById('tutorialShowMe').onclick=()=>{
+  const all=tutorialAllSteps();
+  const step=all[S.tutorialStep];
+
+  if(!step?.target) return;
+
+  highlightTutorialTarget(step.target);
+};
+
+window.addEventListener('resize',()=>{
+  if(!S.tutorialMode) return;
+
+  const step=tutorialAllSteps()[S.tutorialStep];
+  if(step?.target){
+    const el=document.querySelector(step.target);
+    if(el) positionTutorialCoachForTarget(el);
+  }
+});
 
 document.getElementById('tutorialBack').onclick=()=>{
   if(S.tutorialPracticeLive)return;

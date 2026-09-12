@@ -1016,3 +1016,127 @@ html, body { width:100%; height:100%; min-height:100%; overflow:hidden; }
     font-size:.68rem;
   }
 }
+
+
+/* ─────────────────────────────────────────────
+   MOBILE GUIDED TUTORIAL VISIBILITY / SCROLLING
+   ───────────────────────────────────────────── */
+html.tutorial-page-mode,
+body.tutorial-page-mode{
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  height:auto!important;
+  max-height:none!important;
+  min-height:100%!important;
+  touch-action:pan-y!important;
+  overscroll-behavior-y:contain;
+}
+body.tutorial-page-mode .app{
+  min-height:max-content!important;
+  height:auto!important;
+  overflow:visible!important;
+}
+body.tutorial-page-mode .game-shell,
+body.tutorial-page-mode .content,
+body.tutorial-page-mode main{
+  overflow:visible!important;
+  max-height:none!important;
+}
+
+#tutorialModal{
+  align-items:flex-end;
+  justify-content:center;
+  overflow:visible;
+}
+#tutorialModal.coach-top{
+  align-items:flex-start;
+}
+#tutorialModal.coach-bottom{
+  align-items:flex-end;
+}
+#tutorialModal.coach-center{
+  align-items:center;
+}
+#tutorialModal .tutorial-coach{
+  max-height:min(46vh,430px);
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-gutter:stable;
+}
+#tutorialModal .tutorial-coach::-webkit-scrollbar{
+  width:7px;
+}
+#tutorialModal .tutorial-coach::-webkit-scrollbar-thumb{
+  background:#72529a;
+  border-radius:999px;
+}
+.tutorial-actions{
+  grid-template-columns:minmax(82px,.8fr) minmax(92px,.9fr) minmax(130px,1.4fr)!important;
+  position:sticky;
+  bottom:0;
+  padding-top:9px;
+  background:linear-gradient(180deg,transparent,#100c1c 28%);
+}
+.tutorial-show-me.hidden{
+  display:none!important;
+}
+.tutorial-highlight{
+  scroll-margin-top:88px!important;
+  scroll-margin-bottom:52vh!important;
+}
+
+@media(max-width:640px){
+  #tutorialModal{
+    padding:7px!important;
+  }
+  #tutorialModal .tutorial-coach{
+    width:100%!important;
+    max-height:42vh!important;
+    padding:12px!important;
+    border-radius:14px!important;
+  }
+  #tutorialModal.coach-top .tutorial-coach{
+    margin-top:7px;
+  }
+  #tutorialModal.coach-bottom .tutorial-coach{
+    margin-bottom:7px;
+  }
+  .tutorial-coach h2{
+    font-size:1.08rem!important;
+    margin:3px 0 5px!important;
+  }
+  .tutorial-coach-text{
+    font-size:.83rem!important;
+    line-height:1.4!important;
+  }
+  .tutorial-coach-icon{
+    margin-top:7px!important;
+    font-size:1.55rem!important;
+  }
+  .tutorial-actions{
+    grid-template-columns:74px 86px minmax(120px,1fr)!important;
+    gap:6px!important;
+  }
+  .tutorial-actions button{
+    min-height:44px;
+    padding:7px 8px!important;
+    font-size:.72rem!important;
+  }
+  .tutorial-ready-button{
+    font-size:.73rem!important;
+  }
+  .tutorial-highlight{
+    outline-width:3px!important;
+    outline-offset:3px!important;
+    scroll-margin-top:76px!important;
+    scroll-margin-bottom:48vh!important;
+  }
+
+  /* The connection badge must stay visible during its tutorial step. */
+  body.tutorial-page-mode #discordConnectionStatus{
+    position:absolute!important;
+    top:8px!important;
+    left:8px!important;
+  }
+}
