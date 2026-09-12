@@ -1513,6 +1513,61 @@ document.getElementById('streak').textContent='🔥 '+(localStorage.getItem('dg_
 reset(false);
 
 // Initialize Discord Activity context when running inside Discord.
+
+function ensureDiscordStatusBadge(){
+  let badge=document.getElementById('discordConnectionStatus');
+
+  if(badge) return badge;
+
+  badge=document.createElement('div');
+  badge.id='discordConnectionStatus';
+  badge.style.cssText=[
+    'position:fixed',
+    'left:12px',
+    'top:12px',
+    'z-index:9999',
+    'padding:6px 9px',
+    'border-radius:9px',
+    'font:700 11px/1.2 system-ui,sans-serif',
+    'background:#0d0a18e8',
+    'border:1px solid #6b4d9b',
+    'color:#d8cbff',
+    'box-shadow:0 0 14px #0008',
+    'max-width:min(360px,calc(100vw - 24px))',
+    'white-space:normal',
+    'pointer-events:none'
+  ].join(';');
+
+  badge.textContent='Discord: Connecting…';
+  document.body.appendChild(badge);
+  return badge;
+}
+
+function updateDiscordStatusBadge(detail){
+  const badge=ensureDiscordStatusBadge();
+  const user=detail?.user||getDiscordAuth()?.user;
+  const error=detail?.error;
+
+  if(user){
+    const name=user.global_name||user.username||user.id;
+    badge.textContent=`Discord: Connected as ${name}`;
+    badge.style.borderColor='#35d07f';
+    badge.style.color='#aef5ce';
+    return;
+  }
+
+  if(error){
+    badge.textContent=`Discord Login Error: ${error}`;
+    badge.style.borderColor='#e85a7b';
+    badge.style.color='#ffd0da';
+    return;
+  }
+
+  badge.textContent='Discord: Connecting…';
+}
+
+ensureDiscordStatusBadge();
+
 initDiscord().then(auth=>{
   updateDiscordStatusBadge({stage:'connected',user:auth?.user});
   const user=auth?.user;
