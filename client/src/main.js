@@ -1006,17 +1006,40 @@ function completeInteractiveTutorial(){
   // Keep the legacy key set so older code/builds also consider onboarding complete.
   localStorage.setItem('dg_tutorial_seen_v1','1');
 
+  clearInterval(S.timer);
+  clearInterval(S.studyTimer);
+
   S.tutorialMode=false;
   S.tutorialPracticeLive=false;
   S.tutorialPracticeSolved=false;
+  S.studying=false;
+  S.done=false;
+  S.start=null;
+  S.finished=null;
 
+  // Completely remove every tutorial layer before loading the official puzzle.
   hideTutorialCoach();
+  clearTutorialHighlight();
+  document.getElementById('tutorialModal')?.classList.add('hidden');
   document.getElementById('tutorialPracticeHint')?.classList.add('hidden');
+  document.getElementById('studyOverlay')?.classList.add('hidden');
+  document.getElementById('board')?.classList.remove('studying');
+
+  const phase=document.getElementById('phaseBanner');
+  if(phase){
+    phase.classList.remove('live','incomplete');
+  }
+
   document.getElementById('giveUp')?.removeAttribute('disabled');
-  document.getElementById('new')?.removeAttribute('disabled');
+
+  // Test controls stay hidden unless Admin Test Mode is actually enabled.
+  updateTestModeUI();
 
   // This enters the normal server-checked daily flow.
-  reset(false);
+  // Use a short frame delay so the tutorial DOM finishes hiding first.
+  requestAnimationFrame(()=>{
+    reset(false);
+  });
 }
 
 function gen(seed){
