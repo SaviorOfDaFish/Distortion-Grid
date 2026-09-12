@@ -901,6 +901,47 @@ function lightWholeBoardForCompletion(){
   });
 }
 
+
+async function postCompletedResultToDiscord({
+  name,
+  seconds,
+  streak,
+  rank=null
+}){
+  try{
+    const response=await fetch('/api/activity-result',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        username:name,
+        gridNumber:S.num,
+        difficulty:S.difficulty,
+        moves:S.moves,
+        par:S.min,
+        seconds,
+        streak,
+        rank,
+        isChampion:S.isDailyChampion,
+        isPerfect:S.moves===S.min,
+        isTest:S.isTest
+      })
+    });
+
+    const data=await response.json().catch(()=>({}));
+
+    if(!response.ok){
+      console.warn('Discord result post failed:',data.error||response.statusText);
+      return false;
+    }
+
+    console.log('Discord result posted:',data);
+    return true;
+  }catch(error){
+    console.warn('Could not post Distortion Grid result to Discord:',error);
+    return false;
+  }
+}
+
 function finish(){
   S.done=true;S.finished=Date.now();clearInterval(S.timer);clock();
   if(S.soundOn) overloadSound();
@@ -956,7 +997,21 @@ function finish(){
 
   let st=(+localStorage.getItem('dg_streak')||0)+1;
   localStorage.setItem('dg_streak',st);
-  document.getElementById('streak').textContent='🔥 '+st
+  document.getElementById('streak').textContent='🔥 '+st;
+
+  const myRank=Math.max(
+    1,
+    rows.findIndex(r=>r.name===name && r.moves===S.moves && r.seconds===sec)+1
+  );
+
+  // Post the completed result into the configured Discord results channel.
+  // This intentionally happens after local rank/champion status is calculated.
+  postCompletedResultToDiscord({
+    name,
+    seconds:sec,
+    streak:st,
+    rank:myRank
+  });
 }
 function reset(test=false){
   clearInterval(S.timer);
