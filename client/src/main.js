@@ -957,10 +957,46 @@ async function postCompletedResultToDiscord({
 
     return true;
   }catch(error){
-    console.warn('Could not post Distortion Grid result to Discord:',error);
-    if(status) status.textContent='⚠ Could not post to Discord automatically.';
+    console.error('Could not post Distortion Grid result to Discord:',error);
+    if(status){
+      status.textContent='⚠ Could not post to Discord automatically. Check bot connection/permissions.';
+    }
     return false;
   }
+}
+
+
+function migrateLegacyPlayerRecords(displayName){
+  if(!displayName || displayName==='Player') return;
+
+  try{
+    const recordKey=recordStorageKey();
+    const record=JSON.parse(localStorage.getItem(recordKey)||'null');
+
+    if(record?.name==='Player'){
+      record.name=displayName;
+      localStorage.setItem(recordKey,JSON.stringify(record));
+    }
+  }catch{}
+
+  try{
+    const leaderboardKey=leaderboardStorageKey();
+    const rows=JSON.parse(localStorage.getItem(leaderboardKey)||'[]');
+    let changed=false;
+
+    rows.forEach(row=>{
+      if(row?.name==='Player'){
+        row.name=displayName;
+        changed=true;
+      }
+    });
+
+    if(changed){
+      localStorage.setItem(leaderboardKey,JSON.stringify(rows));
+    }
+  }catch{}
+
+  updateRecordPanel();
 }
 
 function finish(){
@@ -1253,4 +1289,10 @@ initDiscord().then(auth=>{
     input.readOnly=true;
     input.title='Connected to your Discord account';
   }
-}).catch(err=>console.warn('Discord SDK init:',err));
+
+  if(displayName){
+    migrateLegacyPlayerRecords(displayName);
+  }
+}).catch(err=>{
+  console.error('Discord SDK authentication failed:',err);
+});

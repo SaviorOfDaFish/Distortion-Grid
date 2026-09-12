@@ -23,20 +23,41 @@ export async function initDiscord(){
     const id=clientId();
 
     if(!id){
-      console.warn('VITE_DISCORD_CLIENT_ID is not configured.');
-      return null;
+      throw new Error('VITE_DISCORD_CLIENT_ID is not configured.');
     }
 
     discordSdk=new DiscordSDK(id);
     await discordSdk.ready();
 
-    const {code}=await discordSdk.commands.authorize({
-      client_id:id,
-      response_type:'code',
-      state:'',
-      prompt:'none',
-      scope:['identify']
-    });
+    let authorization;
+
+    try{
+      // Silent authorization works for players who have already approved the app.
+      authorization=await discordSdk.commands.authorize({
+        client_id:id,
+        response_type:'code',
+        state:'',
+        prompt:'none',
+        scope:['identify']
+      });
+    }catch(silentError){
+      console.warn('Silent Discord authorization failed; requesting consent.',silentError);
+
+      // First-time players may need Discord's authorization prompt.
+      authorization=await discordSdk.commands.authorize({
+        client_id:id,
+        response_type:'code',
+        state:'',
+        prompt:'consent',
+        scope:['identify']
+      });
+    }
+
+    const code=authorization?.code;
+
+    if(!code){
+      throw new Error('Discord did not return an authorization code.');
+    }
 
     const response=await fetch('/api/token',{
       method:'POST',
@@ -50,16 +71,36 @@ export async function initDiscord(){
       throw new Error(tokenData.error || 'Discord token exchange failed.');
     }
 
-    auth=await discordSdk.commands.authenticate({
+    const authenticated=await discordSdk.commands.authenticate({
       access_token:tokenData.access_token
     });
 
-    if(!auth?.user){
+    if(!authenticated?.user){
       throw new Error('Discord authenticate command did not return a user.');
     }
+
+    // IMPORTANT:
+    // authenticate() returns the Discord user/session data, but not the OAuth
+    // token we need for our authenticated server request. Keep both together.
+    auth={
+      ...authenticated,
+      access_token:tokenData.access_token
+    };
+
+    console.log(
+      'Discord authenticated as',
+      auth.user.global_name || auth.user.username || auth.user.id
+    );
 
     return auth;
   })();
 
-  return initPromise;
+  try{
+    return await initPromise;
+  }catch(error){
+    // Allow a later retry instead of permanently caching a failed auth promise.
+    initPromise=null;
+    throw error;
+  }
 }
+
