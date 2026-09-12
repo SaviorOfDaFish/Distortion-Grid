@@ -12,6 +12,15 @@ import {
   clearDistortionResultsChannel,
 } from "./discordBot.js";
 
+import {
+  initDatabase,
+  isDatabaseReady,
+  getDailyAttempt,
+  recordDailyAttempt,
+  deleteDailyAttempt,
+  todayMountainDate,
+} from "./database.js";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -100,6 +109,7 @@ app.get("/api/health", (req, res) => {
     ok: true,
     service: "distortion-grid",
     discordBotReady: isDiscordBotReady(),
+    databaseReady: isDatabaseReady(),
     nodeEnv: process.env.NODE_ENV || "development",
   });
 });
@@ -189,13 +199,6 @@ const recentResultPosts = new Map();
 
 app.post("/api/activity-result", async (req, res) => {
   console.log("[Distortion Result] Completion post request received");
-  if (!isDiscordBotReady()) {
-    return res.status(503).json({
-      ok: false,
-      error: "Discord bot is not connected yet.",
-    });
-  }
-
   const authHeader = String(req.get("authorization") || "");
   const accessToken = authHeader.startsWith("Bearer ")
     ? authHeader.slice(7).trim()
@@ -278,6 +281,8 @@ app.post("/api/activity-result", async (req, res) => {
       : "Unknown",
     moves: Math.max(0, Math.floor(Number(body.moves) || 0)),
     par: Math.max(0, Math.floor(Number(body.par) || 0)),
+    perfectMin: Math.max(0, Math.floor(Number(body.perfectMin) || 0)),
+    scoreLabel: String(body.scoreLabel || "").slice(0, 64),
     seconds: Math.max(0, Math.floor(Number(body.seconds) || 0)),
     streak: Math.max(0, Math.floor(Number(body.streak) || 0)),
     rank: body.rank == null ? null : Math.max(1, Math.floor(Number(body.rank) || 1)),
@@ -285,6 +290,54 @@ app.post("/api/activity-result", async (req, res) => {
     isPerfect: Boolean(body.isPerfect),
     isTest: Boolean(body.isTest),
   };
+
+  if (!result.isTest) {
+    if (!isDatabaseReady()) {
+      return res.status(503).json({
+        ok: false,
+        error: "Database is still connecting.",
+      });
+    }
+
+    const saved = await recordDailyAttempt({
+      discordUserId: result.discordUserId,
+      status: "complete",
+      gridNumber: result.gridNumber,
+      difficulty: result.difficulty,
+      moves: result.moves,
+      par: result.par,
+      perfectMin: result.perfectMin,
+      seconds: result.seconds,
+      rating: result.scoreLabel || null,
+      rank: result.rank,
+    });
+
+    if (!saved.inserted) {
+      const existing = saved.attempt;
+
+      const sameCompletion =
+        existing?.status === "complete" &&
+        Number(existing.moves) === Number(result.moves) &&
+        Number(existing.seconds) === Number(result.seconds) &&
+        Number(existing.gridNumber) === Number(result.gridNumber);
+
+      if (!sameCompletion) {
+        return res.status(409).json({
+          ok: false,
+          error: "Your official Distortion Grid attempt for today is already recorded.",
+          attempt: existing,
+        });
+      }
+    }
+  }
+
+  if (!isDiscordBotReady()) {
+    return res.status(503).json({
+      ok: false,
+      error:
+        "Your official attempt was saved, but the Discord bot is not connected yet.",
+    });
+  }
 
   // Prevent accidental duplicate posts from the same authenticated Discord user.
   const dedupeKey = [
@@ -367,6 +420,122 @@ async function getDiscordUserFromBearer(req) {
   return user;
 }
 
+/**
+ * Server-authoritative official daily attempt lookup.
+ * This is what makes the one-grid-per-day rule work across devices.
+ */
+app.get("/api/attempts/today", async (req, res) => {
+  if (!isDatabaseReady()) {
+    return res.status(503).json({
+      ok: false,
+      error: "Database is still connecting.",
+    });
+  }
+
+  try {
+    const user = await getDiscordUserFromBearer(req);
+    const attempt = await getDailyAttempt(user.id);
+
+    return res.json({
+      ok: true,
+      date: todayMountainDate(),
+      attempt,
+    });
+  } catch (error) {
+    console.error("Daily attempt lookup failed:", error);
+
+    return res.status(error.status || 500).json({
+      ok: false,
+      error: error.message || "Could not check today's attempt.",
+    });
+  }
+});
+
+/**
+ * Record a Give Up as the player's one official attempt for the day.
+ */
+app.post("/api/attempts/give-up", async (req, res) => {
+  if (!isDatabaseReady()) {
+    return res.status(503).json({
+      ok: false,
+      error: "Database is still connecting.",
+    });
+  }
+
+  try {
+    const user = await getDiscordUserFromBearer(req);
+    const body = req.body ?? {};
+
+    const saved = await recordDailyAttempt({
+      discordUserId: user.id,
+      status: "incomplete",
+      gridNumber: Math.max(0, Math.floor(Number(body.gridNumber) || 0)),
+      difficulty: ["Stable", "Unstable", "Fractured", "Cataclysm"].includes(
+        body.difficulty
+      )
+        ? body.difficulty
+        : "Unknown",
+      moves: Math.max(0, Math.floor(Number(body.moves) || 0)),
+      par: Math.max(0, Math.floor(Number(body.par) || 0)),
+      perfectMin: Math.max(0, Math.floor(Number(body.perfectMin) || 0)),
+      seconds: Math.max(0, Math.floor(Number(body.seconds) || 0)),
+      rating: "Incomplete",
+    });
+
+    return res.json({
+      ok: true,
+      inserted: saved.inserted,
+      attempt: saved.attempt,
+    });
+  } catch (error) {
+    console.error("Give Up persistence failed:", error);
+
+    return res.status(error.status || 500).json({
+      ok: false,
+      error: error.message || "Could not save the incomplete attempt.",
+    });
+  }
+});
+
+/**
+ * Admin-only helper used by Reset Everything.
+ * It clears only the authenticated admin's official attempt for today.
+ */
+app.delete("/api/admin/today-attempt", async (req, res) => {
+  if (!isDatabaseReady()) {
+    return res.status(503).json({
+      ok: false,
+      error: "Database is still connecting.",
+    });
+  }
+
+  try {
+    const user = await getDiscordUserFromBearer(req);
+    const adminId = String(process.env.ADMIN_DISCORD_USER_ID || "").trim();
+
+    if (!adminId || user.id !== adminId) {
+      return res.status(403).json({
+        ok: false,
+        error: "Only the configured Distortion Grid admin can reset today's server attempt.",
+      });
+    }
+
+    const deleted = await deleteDailyAttempt(user.id);
+
+    return res.json({
+      ok: true,
+      deleted,
+    });
+  } catch (error) {
+    console.error("Admin daily-attempt reset failed:", error);
+
+    return res.status(error.status || 500).json({
+      ok: false,
+      error: error.message || "Could not reset today's server attempt.",
+    });
+  }
+});
+
 app.post("/api/admin/clear-discord-channel", async (req, res) => {
   try {
     const user = await getDiscordUserFromBearer(req);
@@ -407,40 +576,6 @@ app.post("/api/admin/clear-discord-channel", async (req, res) => {
   }
 });
 
-/**
- * Placeholder: official attempt start endpoint.
- * This will become server-authoritative when PostgreSQL/auth are wired.
- */
-app.post("/api/attempts/start", (req, res) => {
-  res.json({
-    ok: true,
-    studySeconds: 15,
-    message: "Attempt persistence will be added with PostgreSQL.",
-  });
-});
-
-/**
- * IMPORTANT:
- * Do NOT let the browser directly choose username, moves, time, rank, or champion
- * status and immediately post that information to Discord.
- *
- * The final /api/attempts/complete route will:
- * 1. identify the authenticated Discord user,
- * 2. verify today's puzzle,
- * 3. verify the official attempt,
- * 4. calculate rank server-side,
- * 5. store the result in PostgreSQL,
- * 6. then call postDistortionResult().
- *
- * That prevents players from faking champion results.
- */
-app.post("/api/attempts/complete", (req, res) => {
-  res.status(501).json({
-    ok: false,
-    error:
-      "Official completion endpoint is waiting for Discord authentication + PostgreSQL.",
-  });
-});
 
 /**
  * Serve the built Vite frontend.
@@ -464,6 +599,13 @@ app.use((req, res, next) => {
  */
 app.listen(port, () => {
   console.log(`✅ Distortion Grid web server listening on port ${port}`);
+});
+
+/**
+ * Connect PostgreSQL and create required tables automatically.
+ */
+initDatabase().catch((error) => {
+  console.error("❌ Failed to initialize PostgreSQL:", error);
 });
 
 /**
