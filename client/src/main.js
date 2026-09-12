@@ -1,5 +1,5 @@
 import './styles.css';
-import { initDiscord } from './discord.js';
+import { initDiscord, getDiscordAuth } from './discord.js';
 
 const D={N:[-1,0],E:[0,1],S:[1,0],W:[0,-1]}, O={N:'S',E:'W',S:'N',W:'E'}, ORD=['N','E','S','W'];
 let S={n:5,tiles:[],moves:0,start:null,done:false,finished:null,timer:null,num:1,min:1,key:'',isTest:false,difficulty:'Unstable',testIndex:0,crystalCount:1,branchAttempts:5,studyTimer:null,studyRemaining:15,studying:false,soundOn:true,lastPowered:new Set(),lastPoweredCrystals:new Set(),audioCtx:null,isDailyChampion:false,leaderboardSize:5,forcedDifficulty:'Auto',studySeconds:15,gaveUp:false,activeLockerCategory:'trail'};
@@ -903,18 +903,34 @@ function lightWholeBoardForCompletion(){
 
 
 async function postCompletedResultToDiscord({
-  name,
   seconds,
   streak,
   rank=null
 }){
+  const status=document.getElementById('autoPostStatus');
+
   try{
+    if(status) status.textContent='Posting result to Discord…';
+
+    let auth=getDiscordAuth();
+
+    if(!auth){
+      auth=await initDiscord();
+    }
+
+    if(!auth?.access_token){
+      throw new Error('Discord authentication is not ready.');
+    }
+
     const response=await fetch('/api/activity-result',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':`Bearer ${auth.access_token}`
+      },
       body:JSON.stringify({
-        username:name,
         gridNumber:S.num,
+        gridSize:S.n,
         difficulty:S.difficulty,
         moves:S.moves,
         par:S.min,
@@ -930,14 +946,19 @@ async function postCompletedResultToDiscord({
     const data=await response.json().catch(()=>({}));
 
     if(!response.ok){
-      console.warn('Discord result post failed:',data.error||response.statusText);
-      return false;
+      throw new Error(data.error||response.statusText||'Result post failed.');
     }
 
-    console.log('Discord result posted:',data);
+    if(status){
+      status.textContent=data.duplicate
+        ? '✓ Result already posted to Discord'
+        : '✓ Posted automatically to Discord';
+    }
+
     return true;
   }catch(error){
     console.warn('Could not post Distortion Grid result to Discord:',error);
+    if(status) status.textContent='⚠ Could not post to Discord automatically.';
     return false;
   }
 }
@@ -947,7 +968,9 @@ function finish(){
   if(S.soundOn) overloadSound();
 
   const sec=secondsTaken();
-  const name=(document.getElementById('playerName').value||'Player').trim().slice(0,32)||'Player';
+  const discordUser=getDiscordAuth()?.user;
+  const discordDisplayName=(discordUser?.global_name||discordUser?.username||'').trim();
+  const name=(discordDisplayName||document.getElementById('playerName')?.value||'Player').trim().slice(0,32)||'Player';
   const previous=getRecord();
   const isRecord=beatsRecord(S.moves,sec,previous);
 
@@ -987,7 +1010,6 @@ function finish(){
   personal.textContent=summary;
   personal.classList.remove('hidden');
 
-  document.getElementById('shareText').textContent=text();
 
   setTimeout(()=>{
     document.getElementById('result').classList.remove('hidden');
@@ -1007,7 +1029,6 @@ function finish(){
   // Post the completed result into the configured Discord results channel.
   // This intentionally happens after local rank/champion status is calculated.
   postCompletedResultToDiscord({
-    name,
     seconds:sec,
     streak:st,
     rank:myRank
@@ -1206,8 +1227,6 @@ reset(false);
 updateTestButton();
 document.getElementById('new').onclick=()=>reset(true);
 document.getElementById('close').onclick=()=>document.getElementById('result').classList.add('hidden');
-document.getElementById('copy').onclick=async()=>{try{await navigator.clipboard.writeText(text());document.getElementById('status').textContent='Copied! Paste it into Discord.'}catch{document.getElementById('status').textContent='Copy blocked by this browser.'}};
-document.getElementById('share').onclick=async()=>{try{if(navigator.share){await navigator.share({title:'Distortion Grid',text:text()});document.getElementById('status').textContent='Shared!'}else{await navigator.clipboard.writeText(text());document.getElementById('status').textContent='Share sheet unavailable — copied instead.'}}catch{}};
 window.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='s'){
   clearInterval(S.studyTimer);
   S.studying=false;
@@ -1224,4 +1243,14 @@ document.getElementById('streak').textContent='🔥 '+(localStorage.getItem('dg_
 reset(false);
 
 // Initialize Discord Activity context when running inside Discord.
-initDiscord().catch(err => console.warn('Discord SDK init:', err));
+initDiscord().then(auth=>{
+  const user=auth?.user;
+  const displayName=user?.global_name||user?.username;
+  const input=document.getElementById('playerName');
+
+  if(input && displayName){
+    input.value=displayName;
+    input.readOnly=true;
+    input.title='Connected to your Discord account';
+  }
+}).catch(err=>console.warn('Discord SDK init:',err));
