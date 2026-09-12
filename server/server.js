@@ -63,7 +63,6 @@ app.post("/api/token", async (req, res) => {
         client_secret: clientSecret,
         grant_type: "authorization_code",
         code,
-        redirect_uri: "https://127.0.0.1",
       }),
     });
 
