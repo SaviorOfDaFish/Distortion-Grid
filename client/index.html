@@ -26,6 +26,7 @@
       </div>
       <div style="display:flex;gap:6px;align-items:center">
         <button id="adminBtn" class="admin-btn" aria-label="Admin" title="Admin controls">⚙</button>
+        <button id="lockerBtn" class="info-btn locker-btn" aria-label="Cosmetic Locker" title="Cosmetic Locker">✦</button>
         <button id="soundBtn" class="info-btn" aria-label="Toggle sound" title="Toggle sound">🔊</button>
         <button id="infoBtn" class="info-btn" aria-label="How to play">ⓘ</button>
       </div>
@@ -81,6 +82,24 @@
     <div class="prototype-name">
       <input id="playerName" class="name-input" maxlength="32" value="Player" aria-label="Player name">
     </div>
+  </div>
+</div>
+
+
+<div id="lockerModal" class="result hidden">
+  <div class="modal locker-modal">
+    <div class="locker-heading">
+      <div>
+        <div class="eyebrow">COSMETIC COLLECTION</div>
+        <h2>Distortion Locker</h2>
+        <p class="guide-copy">Unlock cosmetics by playing. Cosmetics never change puzzle difficulty or scoring.</p>
+      </div>
+      <button id="closeLockerX" class="locker-close" aria-label="Close Locker">×</button>
+    </div>
+    <div class="locker-summary" id="lockerSummary"></div>
+    <div class="locker-tabs" id="lockerTabs"></div>
+    <div class="locker-grid" id="lockerGrid"></div>
+    <button id="closeLocker" class="primary" style="width:100%;margin-top:14px">Back to Grid</button>
   </div>
 </div>
 
