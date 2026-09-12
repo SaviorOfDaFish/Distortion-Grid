@@ -218,17 +218,17 @@ export async function postDistortionResult(result) {
 
   const moveDelta = Number(moves) - Number(par);
 
-  let golfLabel = scoreLabel;
+  let distortionLabel = scoreLabel;
 
   if (!golfLabel) {
-    if (Number(perfectMin) > 0 && Number(moves) === Number(perfectMin)) golfLabel = "HOLE-IN-ONE";
-    else if (moveDelta <= -3) golfLabel = "Albatross";
-    else if (moveDelta === -2) golfLabel = "Eagle";
-    else if (moveDelta === -1) golfLabel = "Birdie";
-    else if (moveDelta === 0) golfLabel = "Par";
-    else if (moveDelta === 1) golfLabel = "Bogey";
-    else if (moveDelta === 2) golfLabel = "Double Bogey";
-    else golfLabel = `+${moveDelta} Over Par`;
+    if (Number(perfectMin) > 0 && Number(moves) === Number(perfectMin)) distortionLabel = "Perfect Stabilization";
+    else if (moveDelta <= -3) distortionLabel = "Reality Break";
+    else if (moveDelta === -2) distortionLabel = "Rift Mastery";
+    else if (moveDelta === -1) distortionLabel = "Distortion Surge";
+    else if (moveDelta === 0) distortionLabel = "Stabilized";
+    else if (moveDelta === 1) distortionLabel = "Minor Instability";
+    else if (moveDelta === 2) distortionLabel = "Major Instability";
+    else distortionLabel = `+${moveDelta} Over Par`;
   }
 
   const parText =
@@ -259,7 +259,7 @@ export async function postDistortionResult(result) {
         `**${difficulty}**`,
         "",
         `🔄 **${moves} moves** • Par ${par}`,
-        `⛳ **${golfLabel}** • ${parText}`,
+        `🌀 **${distortionLabel}** • ${parText}`,
         `⏱️ **${formatTime(seconds)}**   🔥 **${streak} streak**`,
         rank ? `🏆 **Daily Rank #${rank}**` : null,
         isPerfect ? "💫 **Perfect Stabilization!**" : null,
