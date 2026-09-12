@@ -21,6 +21,72 @@ app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
 /**
+ * Discord Activity OAuth2 code exchange.
+ *
+ * DISCORD_CLIENT_SECRET must stay in Railway and must never be exposed
+ * through VITE_* variables or committed to GitHub.
+ */
+app.post("/api/token", async (req, res) => {
+  const code = String(req.body?.code || "").trim();
+  const clientId =
+    process.env.DISCORD_CLIENT_ID ||
+    process.env.VITE_DISCORD_CLIENT_ID;
+  const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+
+  if (!code) {
+    return res.status(400).json({
+      ok: false,
+      error: "Discord authorization code is missing.",
+    });
+  }
+
+  if (!clientId || !clientSecret) {
+    return res.status(503).json({
+      ok: false,
+      error:
+        "DISCORD_CLIENT_ID/VITE_DISCORD_CLIENT_ID or DISCORD_CLIENT_SECRET is not configured.",
+    });
+  }
+
+  try {
+    const response = await fetch("https://discord.com/api/oauth2/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: "authorization_code",
+        code,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.access_token) {
+      console.error("Discord OAuth token exchange failed:", data);
+
+      return res.status(502).json({
+        ok: false,
+        error: data.error_description || data.error || "Discord OAuth exchange failed.",
+      });
+    }
+
+    return res.json({
+      access_token: data.access_token,
+    });
+  } catch (error) {
+    console.error("Discord OAuth token exchange error:", error);
+
+    return res.status(500).json({
+      ok: false,
+      error: "Discord OAuth exchange failed.",
+    });
+  }
+});
+
+/**
  * Basic Railway health check.
  */
 app.get("/api/health", (req, res) => {
@@ -123,18 +189,73 @@ app.post("/api/activity-result", async (req, res) => {
     });
   }
 
+  const authHeader = String(req.get("authorization") || "");
+  const accessToken = authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7).trim()
+    : "";
+
+  if (!accessToken) {
+    return res.status(401).json({
+      ok: false,
+      error: "Discord authentication is required.",
+    });
+  }
+
+  let discordUser;
+
+  try {
+    const meResponse = await fetch("https://discord.com/api/v10/users/@me", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    discordUser = await meResponse.json();
+
+    if (!meResponse.ok || !discordUser?.id) {
+      return res.status(401).json({
+        ok: false,
+        error: "Discord authentication could not be verified.",
+      });
+    }
+  } catch (error) {
+    console.error("Discord identity lookup failed:", error);
+
+    return res.status(502).json({
+      ok: false,
+      error: "Could not verify the Discord player.",
+    });
+  }
+
   const body = req.body ?? {};
 
-  const username = String(body.username || "Player").trim().slice(0, 32);
-  const avatarUrl =
-    typeof body.avatarUrl === "string" && /^https?:\/\//i.test(body.avatarUrl)
-      ? body.avatarUrl.slice(0, 500)
-      : null;
+  const username = String(
+    discordUser.global_name ||
+    discordUser.username ||
+    "Discord Player"
+  ).trim().slice(0, 64);
+
+  let avatarUrl = null;
+
+  if (discordUser.avatar) {
+    const ext = String(discordUser.avatar).startsWith("a_") ? "gif" : "png";
+    avatarUrl =
+      `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.${ext}?size=256`;
+  } else {
+    try {
+      const defaultIndex = Number((BigInt(discordUser.id) >> 22n) % 6n);
+      avatarUrl = `https://cdn.discordapp.com/embed/avatars/${defaultIndex}.png`;
+    } catch {
+      avatarUrl = "https://cdn.discordapp.com/embed/avatars/0.png";
+    }
+  }
 
   const result = {
-    username: username || "Player",
+    discordUserId: discordUser.id,
+    username: username || "Discord Player",
     avatarUrl,
     gridNumber: Math.max(0, Math.floor(Number(body.gridNumber) || 0)),
+    gridSize: Math.max(4, Math.min(7, Math.floor(Number(body.gridSize) || 5))),
     difficulty: ["Stable", "Unstable", "Fractured", "Cataclysm"].includes(body.difficulty)
       ? body.difficulty
       : "Unknown",
@@ -148,9 +269,9 @@ app.post("/api/activity-result", async (req, res) => {
     isTest: Boolean(body.isTest),
   };
 
-  // Prevent accidental duplicate posts from double-clicks/re-renders.
+  // Prevent accidental duplicate posts from the same authenticated Discord user.
   const dedupeKey = [
-    result.username,
+    result.discordUserId,
     result.gridNumber,
     result.moves,
     result.seconds,
@@ -170,7 +291,6 @@ app.post("/api/activity-result", async (req, res) => {
 
   recentResultPosts.set(dedupeKey, now);
 
-  // Small cleanup so the in-memory map never grows forever.
   for (const [key, timestamp] of recentResultPosts) {
     if (now - timestamp > 10 * 60_000) {
       recentResultPosts.delete(key);
@@ -182,6 +302,11 @@ app.post("/api/activity-result", async (req, res) => {
 
     return res.json({
       ok: true,
+      player: {
+        id: discordUser.id,
+        displayName: result.username,
+        avatarUrl: result.avatarUrl,
+      },
       message: "Distortion Grid result posted to Discord.",
       ...posted,
     });
@@ -194,7 +319,6 @@ app.post("/api/activity-result", async (req, res) => {
     });
   }
 });
-
 /**
  * Placeholder: official attempt start endpoint.
  * This will become server-authoritative when PostgreSQL/auth are wired.

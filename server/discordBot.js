@@ -5,7 +5,10 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  AttachmentBuilder,
 } from "discord.js";
+
+import { createCoveredGridTeaser } from "./resultCard.js";
 
 let client = null;
 
@@ -199,6 +202,7 @@ export async function postDistortionResult(result) {
     username = "Player",
     avatarUrl = null,
     gridNumber = 0,
+    gridSize = 5,
     difficulty = "Unknown",
     moves = 0,
     par = 0,
@@ -209,14 +213,6 @@ export async function postDistortionResult(result) {
     isPerfect = false,
     isTest = false,
   } = result;
-
-  const resultPattern = [
-    "```",
-    "◆ ━ ━ ✦",
-    "    ┃",
-    "    ◆ ━ ◈",
-    "```",
-  ].join("\n");
 
   const moveDelta = Number(moves) - Number(par);
   const parText =
@@ -243,8 +239,6 @@ export async function postDistortionResult(result) {
       [
         `**Distortion Grid #${String(gridNumber).padStart(3, "0")}**`,
         `**${difficulty}**`,
-        "",
-        resultPattern,
         "",
         `🔄 **${moves} moves** • Par ${par} • ${parText}`,
         `⏱️ **${formatTime(seconds)}**   🔥 **${streak} streak**`,
@@ -277,8 +271,26 @@ export async function postDistortionResult(result) {
     );
   }
 
+  const teaserName = `distortion-grid-${gridNumber}-teaser.png`;
+  const teaserBuffer = createCoveredGridTeaser({
+    gridSize,
+    difficulty,
+    gridNumber,
+  });
+
+  const teaserAttachment = new AttachmentBuilder(teaserBuffer, {
+    name: teaserName,
+    description:
+      "Covered Distortion Grid teaser. All tiles are hidden so the solution cannot be copied.",
+  });
+
+  embed
+    .setImage(`attachment://${teaserName}`)
+    .setThumbnail(avatarUrl || null);
+
   const message = await channel.send({
     embeds: [embed],
+    files: [teaserAttachment],
     ...(components.length ? { components } : {}),
   });
 
