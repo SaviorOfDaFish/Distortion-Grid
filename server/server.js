@@ -27,6 +27,7 @@ app.use(express.json({ limit: "1mb" }));
  * through VITE_* variables or committed to GitHub.
  */
 app.post("/api/token", async (req, res) => {
+  console.log("[Discord OAuth] /api/token request received");
   const code = String(req.body?.code || "").trim();
   const clientId =
     process.env.DISCORD_CLIENT_ID ||
@@ -34,6 +35,7 @@ app.post("/api/token", async (req, res) => {
   const clientSecret = process.env.DISCORD_CLIENT_SECRET;
 
   if (!code) {
+    console.error("[Discord OAuth] Missing authorization code");
     return res.status(400).json({
       ok: false,
       error: "Discord authorization code is missing.",
@@ -41,6 +43,7 @@ app.post("/api/token", async (req, res) => {
   }
 
   if (!clientId || !clientSecret) {
+    console.error("[Discord OAuth] Missing client ID or client secret");
     return res.status(503).json({
       ok: false,
       error:
@@ -49,6 +52,7 @@ app.post("/api/token", async (req, res) => {
   }
 
   try {
+    console.log("[Discord OAuth] Exchanging authorization code with Discord");
     const response = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",
       headers: {
@@ -73,6 +77,7 @@ app.post("/api/token", async (req, res) => {
       });
     }
 
+    console.log("[Discord OAuth] Token exchange succeeded");
     return res.json({
       access_token: data.access_token,
     });
@@ -182,6 +187,7 @@ app.get("/api/leaderboard/today", (req, res) => {
 const recentResultPosts = new Map();
 
 app.post("/api/activity-result", async (req, res) => {
+  console.log("[Distortion Result] Completion post request received");
   if (!isDiscordBotReady()) {
     return res.status(503).json({
       ok: false,
@@ -195,6 +201,7 @@ app.post("/api/activity-result", async (req, res) => {
     : "";
 
   if (!accessToken) {
+    console.error("[Distortion Result] Missing bearer token");
     return res.status(401).json({
       ok: false,
       error: "Discord authentication is required.",
@@ -213,6 +220,10 @@ app.post("/api/activity-result", async (req, res) => {
     discordUser = await meResponse.json();
 
     if (!meResponse.ok || !discordUser?.id) {
+      console.error("[Distortion Result] Discord identity verification failed", {
+        status: meResponse.status,
+        response: discordUser,
+      });
       return res.status(401).json({
         ok: false,
         error: "Discord authentication could not be verified.",
@@ -249,6 +260,11 @@ app.post("/api/activity-result", async (req, res) => {
       avatarUrl = "https://cdn.discordapp.com/embed/avatars/0.png";
     }
   }
+
+  console.log(
+    "[Distortion Result] Verified Discord player:",
+    discordUser.global_name || discordUser.username || discordUser.id
+  );
 
   const result = {
     discordUserId: discordUser.id,
@@ -299,6 +315,7 @@ app.post("/api/activity-result", async (req, res) => {
 
   try {
     const posted = await postDistortionResult(result);
+    console.log("[Distortion Result] Result posted successfully", posted);
 
     return res.json({
       ok: true,
