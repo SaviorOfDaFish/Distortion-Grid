@@ -205,6 +205,7 @@
       <button id="adminResetStreak" class="secondary">Reset Streak</button>
       <button id="adminClearHistory" class="secondary admin-danger">Clear Personal History</button>
       <button id="adminUnlockCosmetics" class="secondary">Unlock All Cosmetics</button>
+      <button id="adminToggleTestMode" class="secondary">Enable Test Mode</button>
       <button id="adminResetEverything" class="secondary admin-danger">Reset Everything</button>
     </div>
 
@@ -224,6 +225,19 @@
     <div class="tutorial-step"><div class="tutorial-icon">◆</div><div><b>Power every Crystal</b><span>Every crystal is part of the hidden Core-to-Goal route. A crystal pulses when it becomes energized.</span></div></div>
     <div class="tutorial-step"><div class="tutorial-icon">◈</div><div><b>Reach the Stabilizer</b><span>Power the goal after all crystals. Fewest moves wins; fastest time breaks ties.</span></div></div>
     <button id="tutorialStart" class="primary" style="width:100%;margin-top:14px">Start My First Grid</button>
+  </div>
+</div>
+
+
+<div id="dailyLockedModal" class="result hidden">
+  <div class="modal">
+    <div class="eyebrow">TODAY'S DISTORTION</div>
+    <h2 id="dailyLockedTitle">Daily Attempt Complete</h2>
+    <p id="dailyLockedCopy" class="guide-copy">
+      Your official Distortion Grid attempt for today has already been recorded.
+    </p>
+    <div id="dailyLockedStats" class="personal-note"></div>
+    <button id="dailyLockedClose" class="action alt" style="width:100%;margin-top:12px">Close</button>
   </div>
 </div>
 
@@ -265,7 +279,11 @@
     </div>
     <div id="newRecord" class="new-record hidden">👑 NEW DAILY CHAMPION!</div>
     <div id="personalNote" class="personal-note hidden"></div>
-    <div id="autoPostStatus" class="personal-note">Posting result to Discord…</div>
+    <div id="shareText" class="sharebox"></div>
+    <div class="actions">
+      <button class="primary" id="share">Share Result</button>
+      <button class="secondary" id="copy">Copy for Discord</button>
+    </div>
     <button class="action alt" id="close" style="width:100%;margin-top:10px">Close Result</button>
     <p id="status"></p>
   </div>
