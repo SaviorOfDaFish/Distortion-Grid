@@ -56,7 +56,8 @@ export async function initDiscord(){
         response_type:'code',
         state:'',
         prompt:'none',
-        scope:['identify']
+        scope:['identify'],
+        redirect_uri:'https://127.0.0.1'
       });
     }catch(silentError){
       console.warn('Silent Discord authorization failed; requesting consent.',silentError);
@@ -68,7 +69,8 @@ export async function initDiscord(){
         response_type:'code',
         state:'',
         prompt:'consent',
-        scope:['identify']
+        scope:['identify'],
+        redirect_uri:'https://127.0.0.1'
       });
     }
 
