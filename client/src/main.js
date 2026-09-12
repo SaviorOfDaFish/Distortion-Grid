@@ -73,9 +73,6 @@ const COSMETIC_STATS_KEY='dg_cosmetic_stats_v1';
 const COSMETIC_CATEGORIES=[
   ['trail','Energy Trails'],
   ['frame','Board Frames'],
-  ['crystal','Crystal Skins'],
-  ['core','Core Skins'],
-  ['goal','Goal Skins'],
   ['effect','Completion Effects']
 ];
 
@@ -92,22 +89,6 @@ const COSMETICS={
     {id:'fractured',name:'Fractured Glass',rarity:'Rare',desc:'Cracked luminous edges around the board.',req:s=>s.fracturedClears>=5,requirement:'Complete 5 Fractured grids.'},
     {id:'rift',name:'Cataclysm Rift',rarity:'Legendary',desc:'A red-magenta rift burns around the grid.',req:s=>s.cataclysmClears>=5,requirement:'Complete 5 Cataclysm grids.'},
     {id:'gold',name:'Champion Frame',rarity:'Champion',desc:'A bright gold frame showing leaderboard prestige.',req:s=>s.championWins>=5,requirement:'Become Daily Champion 5 times.'}
-  ],
-  crystal:[
-    {id:'default',name:'Distortion Crystal',rarity:'Common',desc:'The classic required checkpoint.',req:()=>true,requirement:'Unlocked by default.'},
-    {id:'prism',name:'Prism Crystal',rarity:'Rare',desc:'A radiant rainbow-white prism checkpoint.',req:s=>s.perfectSolves>=3,requirement:'Earn 3 Perfect solves.'},
-    {id:'ember',name:'Ember Crystal',rarity:'Epic',desc:'A burning orange crystal with a molten aura.',req:s=>s.fracturedClears>=4,requirement:'Complete 4 Fractured grids.'},
-    {id:'void',name:'Void Crystal',rarity:'Legendary',desc:'A black-violet crystal that bends nearby light.',req:s=>s.cataclysmClears>=4,requirement:'Complete 4 Cataclysm grids.'}
-  ],
-  core:[
-    {id:'default',name:'Distortion Core',rarity:'Common',desc:'The standard source of the grid energy.',req:()=>true,requirement:'Unlocked by default.'},
-    {id:'pulsar',name:'Pulsar Core',rarity:'Rare',desc:'A compact cyan star pulsing with energy.',req:s=>s.bestStreak>=7,requirement:'Reach a 7-day streak.'},
-    {id:'blackstar',name:'Black Star',rarity:'Legendary',desc:'A dark stellar core surrounded by a violet corona.',req:s=>s.cataclysmClears>=5,requirement:'Complete 5 Cataclysm grids.'}
-  ],
-  goal:[
-    {id:'default',name:'Stabilizer',rarity:'Common',desc:'The standard final destination.',req:()=>true,requirement:'Unlocked by default.'},
-    {id:'portal',name:'Rift Portal',rarity:'Rare',desc:'A circular dimensional gate replaces the goal.',req:s=>s.totalClears>=10,requirement:'Complete 10 grids.'},
-    {id:'crown',name:'Crown Gate',rarity:'Champion',desc:'A golden champion gate at the end of the route.',req:s=>s.championWins>=5,requirement:'Become Daily Champion 5 times.'}
   ],
   effect:[
     {id:'default',name:'Stabilization Surge',rarity:'Common',desc:'The standard board-wide energy surge.',req:()=>true,requirement:'Unlocked by default.'},
@@ -149,9 +130,6 @@ function applyCosmetics(){
   const board=document.getElementById('board');
   body.dataset.trail=equipped.trail;
   body.dataset.frame=equipped.frame;
-  body.dataset.crystalSkin=equipped.crystal;
-  body.dataset.coreSkin=equipped.core;
-  body.dataset.goalSkin=equipped.goal;
   body.dataset.completionEffect=equipped.effect;
   const palette=trailPalette(equipped.trail);
   if(palette){
@@ -189,9 +167,6 @@ function updateCosmeticProgressAfterClear(){
 function cosmeticPreview(category,id){
   if(category==='trail') return `<div class="cosmetic-preview preview-trail trail-${id}"><span></span></div>`;
   if(category==='frame') return `<div class="cosmetic-preview preview-frame frame-${id}"><div></div></div>`;
-  if(category==='crystal') return `<div class="cosmetic-preview preview-symbol crystal-${id}">◆</div>`;
-  if(category==='core') return `<div class="cosmetic-preview preview-symbol core-${id}">✦</div>`;
-  if(category==='goal') return `<div class="cosmetic-preview preview-symbol goal-${id}">${id==='portal'?'◎':id==='crown'?'♛':'◈'}</div>`;
   return `<div class="cosmetic-preview preview-effect effect-${id}">✧</div>`;
 }
 function renderLocker(){
