@@ -182,8 +182,6 @@ function clockwiseDistanceToSolved(t){
 function gen(seed){
   const R=rng(seed), n=S.n;
 
-  // Every tile is part of one connected spanning-tree network.
-  // This removes "throwaway" tiles and makes the entire board matter.
   const T=Array.from({length:n},(_,r)=>Array.from({length:n},(_,c)=>({
     r,c,base:[],rot:0,kind:'normal',on:false,required:true
   })));
@@ -195,85 +193,143 @@ function gen(seed){
     if(!T[b.r][b.c].base.includes(O[d])) T[b.r][b.c].base.push(O[d]);
   }
 
-  // Randomized DFS creates a full-grid maze/tree with no unused tiles.
-  const root={r:Math.floor(R()*n),c:0};
-  const stack=[root];
-  const seen=new Set([`${root.r},${root.c}`]);
-  const visitOrder=[root];
-
-  while(stack.length){
-    const cur=stack[stack.length-1];
-    let candidates=ORD.map(d=>{
-      const [dr,dc]=D[d];
-      return {r:cur.r+dr,c:cur.c+dc,d};
-    }).filter(p=>p.r>=0&&p.r<n&&p.c>=0&&p.c<n&&!seen.has(`${p.r},${p.c}`));
-
-    if(!candidates.length){
-      stack.pop();
-      continue;
+  function rowSnake(){
+    const p=[];
+    for(let r=0;r<n;r++){
+      const cols=(r%2===0)
+        ? Array.from({length:n},(_,i)=>i)
+        : Array.from({length:n},(_,i)=>n-1-i);
+      for(const c of cols) p.push({r,c});
     }
-
-    // Light directional bias varies by difficulty but remains seeded/random.
-    candidates=candidates.sort(()=>R()-.5);
-    const next=candidates[Math.floor(R()*candidates.length)];
-    con(cur,next);
-    seen.add(`${next.r},${next.c}`);
-    visitOrder.push({r:next.r,c:next.c});
-    stack.push({r:next.r,c:next.c});
+    return p;
   }
 
-  // Core begins on the left side. Goal is a distant tile, preferably right side.
-  const leftTiles=visitOrder.filter(p=>p.c===0);
-  const start=leftTiles[Math.floor(R()*leftTiles.length)] || root;
-
-  let farthest=visitOrder[0], farScore=-1;
-  for(const p of visitOrder){
-    const score=Math.abs(p.r-start.r)+Math.abs(p.c-start.c)+(p.c===n-1? n:0);
-    if(score>farScore){farScore=score;farthest=p;}
+  function columnSnake(){
+    const p=[];
+    for(let c=0;c<n;c++){
+      const rows=(c%2===0)
+        ? Array.from({length:n},(_,i)=>i)
+        : Array.from({length:n},(_,i)=>n-1-i);
+      for(const r of rows) p.push({r,c});
+    }
+    return p;
   }
-  const end=farthest;
+
+  function spiral(){
+    const p=[];
+    let top=0,bottom=n-1,left=0,right=n-1;
+    while(top<=bottom && left<=right){
+      for(let c=left;c<=right;c++) p.push({r:top,c});
+      top++;
+      for(let r=top;r<=bottom;r++) p.push({r,c:right});
+      right--;
+      if(top<=bottom){
+        for(let c=right;c>=left;c--) p.push({r:bottom,c});
+        bottom--;
+      }
+      if(left<=right){
+        for(let r=bottom;r>=top;r--) p.push({r,c:left});
+        left++;
+      }
+    }
+    return p;
+  }
+
+  function transformPath(path, mode){
+    return path.map(({r,c})=>{
+      if(mode===1) return {r:n-1-r,c};
+      if(mode===2) return {r,c:n-1-c};
+      if(mode===3) return {r:n-1-r,c:n-1-c};
+      if(mode===4) return {r:c,c:r};
+      if(mode===5) return {r:n-1-c,c:r};
+      if(mode===6) return {r:c,c:n-1-r};
+      if(mode===7) return {r:n-1-c,c:n-1-r};
+      return {r,c};
+    });
+  }
+
+  // Use several full-grid single-path templates, then transform/reverse them
+  // from the daily seed so the route changes while remaining guaranteed valid.
+  const templates=[rowSnake(),columnSnake(),spiral()];
+  let path=templates[Math.floor(R()*templates.length)];
+  path=transformPath(path,Math.floor(R()*8));
+
+  // Remove accidental duplicate cells from a transformed template fallback.
+  // All supported transforms should preserve uniqueness, but this keeps generation safe.
+  const unique=new Set(path.map(p=>`${p.r},${p.c}`));
+  if(unique.size!==n*n){
+    path=(n%2===0?columnSnake():rowSnake());
+  }
+
+  if(R()<0.5) path=[...path].reverse();
+
+  // Build exactly ONE continuous path through every tile.
+  for(let i=0;i<path.length-1;i++) con(path[i],path[i+1]);
+
+  const start=path[0];
+  const end=path[path.length-1];
 
   T[start.r][start.c].kind='core';
   T[end.r][end.c].kind='exit';
 
-  // Pick crystals spread across the traversal so harder modes require more checkpoints.
-  const crystalCandidates=visitOrder.filter(p=>!(p.r===start.r&&p.c===start.c)&&!(p.r===end.r&&p.c===end.c));
+  // Crystals are positioned in order along the one official route.
   for(let i=1;i<=S.crystalCount;i++){
-    const idx=Math.max(0,Math.min(crystalCandidates.length-1,Math.floor(crystalCandidates.length*(i/(S.crystalCount+1)))));
-    let cp=crystalCandidates[idx];
-    if(cp && T[cp.r][cp.c].kind==='normal') T[cp.r][cp.c].kind='crystal';
+    const idx=Math.max(
+      1,
+      Math.min(
+        path.length-2,
+        Math.round((path.length-1)*(i/(S.crystalCount+1)))
+      )
+    );
+    const cp=path[idx];
+    if(T[cp.r][cp.c].kind==='normal') T[cp.r][cp.c].kind='crystal';
   }
 
-  // Difficulty-based minimum scramble. We regenerate rotations until the board
-  // has enough required moves to avoid trivially easy daily puzzles.
+  // Scramble every tile. Because every tile belongs to the single path,
+  // Par is the exact minimum number of clockwise rotations needed to restore it.
   const minParByDifficulty={Stable:10,Unstable:18,Fractured:30,Cataclysm:45};
   const targetPar=minParByDifficulty[S.difficulty]||18;
 
-  let bestPar=0;
+  let bestPar=-1;
   let bestRots=null;
-  for(let attempt=0;attempt<80;attempt++){
+
+  for(let attempt=0;attempt<120;attempt++){
     let par=0;
     const rots=[];
+
     for(let r=0;r<n;r++){
       rots[r]=[];
       for(let c=0;c<n;c++){
         const t=T[r][c];
-        // Do not intentionally leave a tile solved unless randomness forces it;
-        // harder difficulties favor 1-3 quarter-turn offsets.
+
         let rot;
-        if(S.difficulty==='Stable') rot=Math.floor(R()*4);
-        else rot=1+Math.floor(R()*3);
+        if(S.difficulty==='Stable'){
+          rot=Math.floor(R()*4);
+        }else{
+          // Favor unsolved orientations on harder modes.
+          rot=1+Math.floor(R()*3);
+        }
+
         t.rot=rot;
         rots[r][c]=rot;
         par+=clockwiseDistanceToSolved(t);
       }
     }
-    if(par>bestPar){bestPar=par;bestRots=rots.map(row=>[...row]);}
+
+    if(par>bestPar){
+      bestPar=par;
+      bestRots=rots.map(row=>[...row]);
+    }
+
     if(par>=targetPar) break;
   }
 
   if(bestRots){
-    for(let r=0;r<n;r++)for(let c=0;c<n;c++) T[r][c].rot=bestRots[r][c];
+    for(let r=0;r<n;r++){
+      for(let c=0;c<n;c++){
+        T[r][c].rot=bestRots[r][c];
+      }
+    }
   }
 
   let exactPar=0;
@@ -282,7 +338,6 @@ function gen(seed){
   S.tiles=T;
   S.min=Math.max(1,exactPar);
 }
-
 function tileEl(t){
   let b=document.createElement('button');b.className='tile '+t.kind;b.dataset.r=t.r;b.dataset.c=t.c;
   let ds=dirs(t);
@@ -483,14 +538,18 @@ function clock(){
 }
 function solved(){
   flow();
+
   const all=S.tiles.flat();
   const e=all.find(t=>t.kind==='exit');
   const crystals=all.filter(t=>t.kind==='crystal');
 
-  // A valid solve powers the entire board, every crystal, and the goal.
-  // This prevents players from ignoring most of the grid.
+  // PATH PUZZLE RULE:
+  // Every tile must match its intended orientation so the board forms
+  // one continuous route with no branches or alternate network solution.
+  const exactPath=all.every(t=>sameDirs(dirs(t),t.base));
   const allPowered=all.every(t=>t.on);
-  return allPowered && e?.on && crystals.every(c=>c.on);
+
+  return exactPath && allPowered && e?.on && crystals.every(c=>c.on);
 }
 function turn(r,c){if(S.done||S.studying)return;startClock();let t=S.tiles[r][c];t.rot=(t.rot+1)%4;S.moves++;render();if(solved())finish()}
 function stars(){let x=S.moves/S.min;return x<=1.15?'⭐⭐⭐':x<=1.6?'⭐⭐':'⭐'}
@@ -606,7 +665,7 @@ function incompleteStorageKey(){
 }
 
 function revealParPath(){
-  // rot=0 is the generator's solved orientation for every tile.
+  // rot=0 reveals the exact single Par path from Core through the Crystal(s) to the Goal.
   S.tiles.flat().forEach(t=>t.rot=0);
   render();
   const board=document.getElementById('board');
