@@ -8,6 +8,7 @@ import {
   startDiscordBot,
   isDiscordBotReady,
   postTestDistortionResult,
+  postDistortionResult,
 } from "./discordBot.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -99,6 +100,99 @@ app.post("/api/admin/test-discord-post", async (req, res) => {
  */
 app.get("/api/leaderboard/today", (req, res) => {
   res.json([]);
+});
+
+
+/**
+ * ACTIVITY RESULT POST
+ *
+ * Temporary bridge used while Distortion Grid is in testing.
+ * The browser sends the completed result and the bot posts a Wordle-style
+ * result card to DISCORD_RESULTS_CHANNEL_ID.
+ *
+ * IMPORTANT: before public launch, replace this with authenticated,
+ * server-authoritative Discord user + PostgreSQL verification.
+ */
+const recentResultPosts = new Map();
+
+app.post("/api/activity-result", async (req, res) => {
+  if (!isDiscordBotReady()) {
+    return res.status(503).json({
+      ok: false,
+      error: "Discord bot is not connected yet.",
+    });
+  }
+
+  const body = req.body ?? {};
+
+  const username = String(body.username || "Player").trim().slice(0, 32);
+  const avatarUrl =
+    typeof body.avatarUrl === "string" && /^https?:\/\//i.test(body.avatarUrl)
+      ? body.avatarUrl.slice(0, 500)
+      : null;
+
+  const result = {
+    username: username || "Player",
+    avatarUrl,
+    gridNumber: Math.max(0, Math.floor(Number(body.gridNumber) || 0)),
+    difficulty: ["Stable", "Unstable", "Fractured", "Cataclysm"].includes(body.difficulty)
+      ? body.difficulty
+      : "Unknown",
+    moves: Math.max(0, Math.floor(Number(body.moves) || 0)),
+    par: Math.max(0, Math.floor(Number(body.par) || 0)),
+    seconds: Math.max(0, Math.floor(Number(body.seconds) || 0)),
+    streak: Math.max(0, Math.floor(Number(body.streak) || 0)),
+    rank: body.rank == null ? null : Math.max(1, Math.floor(Number(body.rank) || 1)),
+    isChampion: Boolean(body.isChampion),
+    isPerfect: Boolean(body.isPerfect),
+    isTest: Boolean(body.isTest),
+  };
+
+  // Prevent accidental duplicate posts from double-clicks/re-renders.
+  const dedupeKey = [
+    result.username,
+    result.gridNumber,
+    result.moves,
+    result.seconds,
+    result.isTest ? "test" : "official",
+  ].join(":");
+
+  const now = Date.now();
+  const previous = recentResultPosts.get(dedupeKey);
+
+  if (previous && now - previous < 60_000) {
+    return res.json({
+      ok: true,
+      duplicate: true,
+      message: "Result was already posted.",
+    });
+  }
+
+  recentResultPosts.set(dedupeKey, now);
+
+  // Small cleanup so the in-memory map never grows forever.
+  for (const [key, timestamp] of recentResultPosts) {
+    if (now - timestamp > 10 * 60_000) {
+      recentResultPosts.delete(key);
+    }
+  }
+
+  try {
+    const posted = await postDistortionResult(result);
+
+    return res.json({
+      ok: true,
+      message: "Distortion Grid result posted to Discord.",
+      ...posted,
+    });
+  } catch (error) {
+    console.error("Activity result post failed:", error);
+
+    return res.status(500).json({
+      ok: false,
+      error: error.message,
+    });
+  }
 });
 
 /**

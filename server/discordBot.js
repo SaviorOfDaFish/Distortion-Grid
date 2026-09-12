@@ -2,6 +2,9 @@ import {
   Client,
   GatewayIntentBits,
   EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
 } from "discord.js";
 
 let client = null;
@@ -192,10 +195,91 @@ export async function postDistortionResult(result) {
     throw new Error("Configured results channel is not text-based.");
   }
 
-  const embed = buildDistortionResultEmbed(result);
+  const {
+    username = "Player",
+    avatarUrl = null,
+    gridNumber = 0,
+    difficulty = "Unknown",
+    moves = 0,
+    par = 0,
+    seconds = 0,
+    streak = 0,
+    rank = null,
+    isChampion = false,
+    isPerfect = false,
+    isTest = false,
+  } = result;
+
+  const resultPattern = [
+    "```",
+    "◆ ━ ━ ✦",
+    "    ┃",
+    "    ◆ ━ ◈",
+    "```",
+  ].join("\n");
+
+  const moveDelta = Number(moves) - Number(par);
+  const parText =
+    moveDelta === 0
+      ? "✨ PERFECT — exactly Par!"
+      : moveDelta > 0
+        ? `+${moveDelta} over Par`
+        : `${Math.abs(moveDelta)} under Par`;
+
+  const title = isChampion
+    ? "👑 NEW DAILY CHAMPION"
+    : isTest
+      ? "🧪 DISTORTION GRID TEST COMPLETE"
+      : "🌌 DISTORTION STABILIZED";
+
+  const embed = new EmbedBuilder()
+    .setColor(isChampion ? 0xffc857 : 0x7c3cff)
+    .setAuthor({
+      name: `${username} stabilized the grid!`,
+      ...(avatarUrl ? { iconURL: avatarUrl } : {}),
+    })
+    .setTitle(title)
+    .setDescription(
+      [
+        `**Distortion Grid #${String(gridNumber).padStart(3, "0")}**`,
+        `**${difficulty}**`,
+        "",
+        resultPattern,
+        "",
+        `🔄 **${moves} moves** • Par ${par} • ${parText}`,
+        `⏱️ **${formatTime(seconds)}**   🔥 **${streak} streak**`,
+        rank ? `🏆 **Daily Rank #${rank}**` : null,
+        isPerfect ? "💫 **Perfect Stabilization!**" : null,
+      ]
+        .filter(Boolean)
+        .join("\n")
+    )
+    .setThumbnail(avatarUrl || null)
+    .setFooter({
+      text: "Can you stabilize today's Distortion Grid?",
+    })
+    .setTimestamp();
+
+  const applicationId =
+    process.env.DISCORD_CLIENT_ID ||
+    process.env.DISCORD_APPLICATION_ID;
+
+  const components = [];
+
+  if (applicationId) {
+    const playButton = new ButtonBuilder()
+      .setLabel("Play Now!")
+      .setStyle(ButtonStyle.Link)
+      .setURL(`https://discord.com/activities/${applicationId}`);
+
+    components.push(
+      new ActionRowBuilder().addComponents(playButton)
+    );
+  }
 
   const message = await channel.send({
     embeds: [embed],
+    ...(components.length ? { components } : {}),
   });
 
   return {
