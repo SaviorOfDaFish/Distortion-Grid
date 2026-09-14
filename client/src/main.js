@@ -1737,15 +1737,13 @@ function solved(){
   flow();
 
   const all=S.tiles.flat();
-  const route=all.filter(t=>t.required);
   const goal=all.find(t=>t.kind==='exit');
   const crystals=all.filter(t=>t.kind==='crystal');
 
-  // Only the official hidden route needs to be solved. Decoy tiles are optional.
-  const routeOriented=route.every(t=>sameDirs(dirs(t),t.base));
-  const routePowered=route.every(t=>t.on);
-
-  return routeOriented && routePowered && goal?.on && crystals.every(c=>c.on);
+  // Completion is based on LIVE connectivity, not matching the generator's
+  // hidden Par route. Players may solve with any valid route and any number
+  // of moves as long as Core energy reaches every Crystal and the Goal.
+  return Boolean(goal?.on) && crystals.every(c=>c.on);
 }
 function turn(r,c){
   if(S.done||S.studying)return;
@@ -2264,6 +2262,12 @@ function reset(test=false){
 
 
 
+
+document.getElementById('tutorialDismiss').onclick=()=>{
+  // Dismissing onboarding is local to this device for now. It does NOT consume
+  // the daily attempt; reset(false) will enter the normal server-checked flow.
+  completeInteractiveTutorial();
+};
 
 document.getElementById('tutorialShowMe').onclick=()=>{
   const all=tutorialAllSteps();
