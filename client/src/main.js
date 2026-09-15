@@ -104,18 +104,18 @@ function distortionScore(moves=S.moves){
 }
 
 function officialPlayerId(){
-  return getDiscordAuth()?.user?.id || 'browser';
+  // Match Monster Hunt: the permanent player key is the authenticated Discord user.id.
+  // Never fall back to a shared browser identity.
+  return getDiscordAuth()?.user?.id || null;
 }
 
 function dailyAttemptStorageKey(playerId=officialPlayerId()){
+  if(!playerId) return null;
   return `dg_daily_attempt_${today()}_${playerId}`;
 }
 
-function dailyAttemptFallbackKey(){
-  return `dg_daily_attempt_${today()}`;
-}
-
 function parseStoredAttempt(key){
+  if(!key) return null;
   try{
     return JSON.parse(localStorage.getItem(key)||'null');
   }catch{
@@ -124,49 +124,39 @@ function parseStoredAttempt(key){
 }
 
 function getDailyAttempt(){
-  // Prefer the authenticated Discord-user lock.
-  const scoped=parseStoredAttempt(dailyAttemptStorageKey());
-  if(scoped && scoped.status!=='active') return scoped;
+  // Never evaluate a player-specific daily lock until Discord has identified the player.
+  const userId=officialPlayerId();
+  if(!userId) return null;
 
-  const fallback=parseStoredAttempt(dailyAttemptFallbackKey());
-  return fallback && fallback.status!=='active' ? fallback : null;
+  const scoped=parseStoredAttempt(dailyAttemptStorageKey(userId));
+  return scoped && scoped.status!=='active' ? scoped : null;
 }
 
 function saveDailyAttempt(attempt){
   if(S.isTest || isAdminTestMode()) return;
 
+  const userId=officialPlayerId();
+  if(!userId){
+    // The PostgreSQL/API path is authoritative; do not create a device-wide lock.
+    console.warn('Skipping local daily-attempt cache until Discord identity is known.');
+    return;
+  }
+
   const stored={
     date:today(),
-    playerId:officialPlayerId(),
+    playerId:userId,
     ...attempt
   };
 
-  // Always save a same-day fallback immediately.
-  localStorage.setItem(dailyAttemptFallbackKey(),JSON.stringify(stored));
-
-  // Also save the Discord-scoped record whenever identity is available.
-  localStorage.setItem(dailyAttemptStorageKey(),JSON.stringify(stored));
+  localStorage.setItem(dailyAttemptStorageKey(userId),JSON.stringify(stored));
 }
 
 function migrateBrowserDailyAttempt(){
-  const userId=getDiscordAuth()?.user?.id;
-  if(!userId) return;
-
-  const browserKey=`dg_daily_attempt_${today()}_browser`;
-  const fallbackKey=dailyAttemptFallbackKey();
-  const userKey=`dg_daily_attempt_${today()}_${userId}`;
-
-  const source=
-    localStorage.getItem(userKey) ||
-    localStorage.getItem(fallbackKey) ||
-    localStorage.getItem(browserKey);
-
-  if(source){
-    localStorage.setItem(userKey,source);
-    localStorage.setItem(fallbackKey,source);
-  }
-
-  localStorage.removeItem(browserKey);
+  // Older builds created browser-wide keys. They are unsafe with multiple Discord
+  // accounts on one device, so remove them instead of assigning them to whoever
+  // happens to log in next.
+  localStorage.removeItem(`dg_daily_attempt_${today()}`);
+  localStorage.removeItem(`dg_daily_attempt_${today()}_browser`);
 }
 
 
@@ -366,7 +356,6 @@ async function prepareOfficialAttempt(){
       applyCosmetics();
     }
 
-    localStorage.setItem(dailyAttemptFallbackKey(),JSON.stringify(attempt));
     localStorage.setItem(dailyAttemptStorageKey(),JSON.stringify(attempt));
 
     if(Number(attempt.studyRemainingSeconds)>0){
@@ -430,7 +419,6 @@ async function syncServerDailyAttempt(){
 
     S.serverAttempt=attempt;
 
-    localStorage.setItem(dailyAttemptFallbackKey(),JSON.stringify(attempt));
     localStorage.setItem(dailyAttemptStorageKey(),JSON.stringify(attempt));
 
     document.getElementById('result')?.classList.add('hidden');
@@ -500,7 +488,6 @@ async function saveGiveUpToServer(incompleteAttempt){
     }
 
     if(data.attempt){
-      localStorage.setItem(dailyAttemptFallbackKey(),JSON.stringify(data.attempt));
       localStorage.setItem(dailyAttemptStorageKey(),JSON.stringify(data.attempt));
     }
   }catch(error){
@@ -550,7 +537,7 @@ function showDailyLock(attempt){
 
 function enforceDailyAttemptLock(){
   if(S.isTest || isAdminTestMode()) return false;
-  migrateBrowserDailyAttempt();
+  if(!officialPlayerId()) return false;
   const attempt=getDailyAttempt();
   return attempt ? showDailyLock(attempt) : false;
 }
@@ -2197,16 +2184,9 @@ function reset(test=false){
 
   const guidedTutorialComplete=localStorage.getItem(TUTORIAL_COMPLETE_KEY)==='1';
 
-  // On a true first launch, onboarding happens before the official daily puzzle.
+  // Tutorial is device-local for now. Crucially, do not infer any official
+  // daily-attempt state before Discord identity is known.
   if(!test && !guidedTutorialComplete){
-    const existingAttempt=getDailyAttempt();
-
-    // If this device already knows the player used today's attempt, preserve the lock.
-    if(existingAttempt){
-      showDailyLock(existingAttempt);
-      return;
-    }
-
     startInteractiveTutorial();
     return;
   }
@@ -2727,14 +2707,15 @@ initDiscord().then(async auth=>{
   migrateBrowserDailyAttempt();
 
   if(!isAdminTestMode()){
-    // Local lock is an instant fallback, PostgreSQL is the cross-device authority.
-    const localAttempt=getDailyAttempt();
+    // PostgreSQL is authoritative and every request is authenticated to Discord user.id.
+    // Check the server before trusting any device-local cache.
+    const handledByServer=await syncServerDailyAttempt();
 
-    if(localAttempt){
-      showDailyLock(localAttempt);
+    if(!handledByServer){
+      // Only now, after identity is known, may we use this account's scoped cache.
+      const localAttempt=getDailyAttempt();
+      if(localAttempt) showDailyLock(localAttempt);
     }
-
-    await syncServerDailyAttempt();
   }
 }).catch(err=>{
   console.error('Discord SDK authentication failed:',err);
