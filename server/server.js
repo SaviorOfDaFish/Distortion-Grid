@@ -201,46 +201,16 @@ const recentResultPosts = new Map();
 
 app.post("/api/activity-result", async (req, res) => {
   console.log("[Distortion Result] Completion post request received");
-  const authHeader = String(req.get("authorization") || "");
-  const accessToken = authHeader.startsWith("Bearer ")
-    ? authHeader.slice(7).trim()
-    : "";
-
-  if (!accessToken) {
-    console.error("[Distortion Result] Missing bearer token");
-    return res.status(401).json({
-      ok: false,
-      error: "Discord authentication is required.",
-    });
-  }
 
   let discordUser;
 
   try {
-    const meResponse = await fetch("https://discord.com/api/v10/users/@me", {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
-
-    discordUser = await meResponse.json();
-
-    if (!meResponse.ok || !discordUser?.id) {
-      console.error("[Distortion Result] Discord identity verification failed", {
-        status: meResponse.status,
-        response: discordUser,
-      });
-      return res.status(401).json({
-        ok: false,
-        error: "Discord authentication could not be verified.",
-      });
-    }
+    discordUser = await getDiscordUserFromBearer(req);
   } catch (error) {
-    console.error("Discord identity lookup failed:", error);
-
-    return res.status(502).json({
+    console.error("[Distortion Result] Discord identity verification failed:", error);
+    return res.status(error.status || 401).json({
       ok: false,
-      error: "Could not verify the Discord player.",
+      error: error.message || "Discord authentication could not be verified.",
     });
   }
 
@@ -394,6 +364,10 @@ app.post("/api/activity-result", async (req, res) => {
   }
 });
 
+// Match Monster Hunt's Activity identity model:
+// bearer token -> Discord /users/@me -> immutable user.id.
+const activityTokenCache = new Map();
+
 async function getDiscordUserFromBearer(req) {
   const authHeader = String(req.get("authorization") || "");
   const accessToken = authHeader.startsWith("Bearer ")
@@ -406,19 +380,36 @@ async function getDiscordUserFromBearer(req) {
     throw error;
   }
 
-  const response = await fetch("https://discord.com/api/v10/users/@me", {
+  const cached = activityTokenCache.get(accessToken);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.user;
+  }
+
+  const response = await fetch("https://discord.com/api/users/@me", {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
   });
 
-  const user = await response.json();
-
-  if (!response.ok || !user?.id) {
+  if (!response.ok) {
+    activityTokenCache.delete(accessToken);
     const error = new Error("Discord authentication could not be verified.");
     error.status = 401;
     throw error;
   }
+
+  const user = await response.json();
+
+  if (!user?.id) {
+    const error = new Error("Discord did not return a valid player identity.");
+    error.status = 401;
+    throw error;
+  }
+
+  activityTokenCache.set(accessToken, {
+    user,
+    expiresAt: Date.now() + 5 * 60 * 1000,
+  });
 
   return user;
 }
@@ -426,6 +417,26 @@ async function getDiscordUserFromBearer(req) {
 /**
  * Start or resume today's official attempt.
  */
+app.get("/api/activity/me", async (req, res) => {
+  try {
+    const user = await getDiscordUserFromBearer(req);
+    return res.json({
+      ok: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        displayName: user.global_name || user.username,
+        avatar: user.avatar || null,
+      },
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      ok: false,
+      error: error.message || "Could not identify the Discord player.",
+    });
+  }
+});
+
 app.post("/api/attempts/start", async (req, res) => {
   if (!isDatabaseReady()) {
     return res.status(503).json({ ok:false, error:"Database is still connecting." });
